@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -15,13 +16,61 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Scale, Search, Bell, Settings, LogOut, User, Plus, MessageSquare } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/contexts/auth-context"
+import { getApiClient } from "@/lib/api-client"
+import { useToast } from "@/lib/use-toast"
 
 export function DashboardHeader() {
+  const router = useRouter()
+  const { user, logout } = useAuth()
+  const { toast } = useToast()
+  
   const [notifications] = useState([
     { id: 1, title: "New document uploaded", case: "Smith vs. Johnson", time: "5m ago" },
     { id: 2, title: "Task deadline approaching", case: "TechCorp Merger", time: "1h ago" },
     { id: 3, title: "Court date reminder", case: "State vs. Williams", time: "2h ago" },
   ])
+
+  const handleLogout = async () => {
+    try {
+      // Call backend logout endpoint
+      const apiClient = getApiClient()
+      await apiClient.post('/api/users/auth/logout/')
+    } catch (error: any) {
+      console.error('Logout error:', error)
+    } finally {
+      // Clear frontend state and redirect
+      logout()
+      toast({
+        title: "Logged out successfully",
+        description: "You have been logged out of your account.",
+      })
+      router.push('/login')
+    }
+  }
+
+  const getInitials = (name: string) => {
+    if (!name) return 'U'
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  const getRoleDisplayName = (role: string) => {
+    switch (role) {
+      case 'super_user':
+        return 'Super User'
+      case 'case_owner':
+        return 'Case Owner'
+      case 'invitee':
+        return 'Invitee'
+      default:
+        return role?.replace('_', ' ') || 'User'
+    }
+  }
 
   return (
     <header className="border-b bg-white sticky top-0 z-50">
@@ -115,31 +164,39 @@ export function DashboardHeader() {
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src="/placeholder.svg?height=32&width=32" alt="User" />
-                    <AvatarFallback>JS</AvatarFallback>
+                    <AvatarFallback>{getInitials(user?.full_name || user?.first_name + ' ' + user?.last_name || 'U')}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">John Smith</p>
-                    <p className="text-xs leading-none text-muted-foreground">john@smithlaw.com</p>
+                    <p className="text-sm font-medium leading-none">
+                      {user?.full_name || user?.first_name + ' ' + user?.last_name || 'User'}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {user?.email || 'No email'}
+                    </p>
                     <Badge variant="secondary" className="w-fit mt-1">
-                      Super User
+                      {getRoleDisplayName(user?.role || '')}
                     </Badge>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings" className="cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
                 </DropdownMenuItem>
