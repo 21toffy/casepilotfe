@@ -9,6 +9,8 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
 import {
   Download,
   Edit,
@@ -25,6 +27,8 @@ import {
   Target,
   FileText,
   Loader2,
+  Clock,
+  AlertTriangle,
 } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { AIAssistantChat } from "@/components/ai-assistant-chat"
@@ -37,12 +41,17 @@ import { TaskDetailsModal } from "@/components/task-details-modal"
 import { CaseFactModal } from "@/components/case-fact-modal"
 import { DesiredOutcomeModal } from "@/components/desired-outcome-modal"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
-import { RegenerateCaseDialog } from "@/components/regenerate-case-dialog"
+import { AddTaskModal } from "@/components/add-task-modal"
+import { InviteToCaseModal } from "@/components/invite-to-case-modal"
 import { getApiClient } from "@/lib/api-client"
 import { useToast } from "@/lib/use-toast"
 import ProtectedRoute from "@/components/protected-route"
+import { Breadcrumbs } from "@/components/breadcrumbs"
+import { SubmissionApprovalCard } from "@/components/submission-approval-card"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function CaseDetailPage() {
+  const { user } = useAuth()
   const params = useParams()
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("overview")
@@ -57,10 +66,17 @@ export default function CaseDetailPage() {
   const [facts, setFacts] = useState<any[]>([])
   const [desiredOutcomes, setDesiredOutcomes] = useState<any[]>([])
   const [strategies, setStrategies] = useState<any[]>([])
+  const [approvals, setApprovals] = useState<any[]>([])
+  const [reports, setReports] = useState<any[]>([])
+  const [artifacts, setArtifacts] = useState<any[]>([])
   const [loadingStrategies, setLoadingStrategies] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
+  const [convertedSteps, setConvertedSteps] = useState<Set<string>>(new Set())
+  const [convertingStep, setConvertingStep] = useState<{strategyId: number, stepIndex: number} | null>(null)
+  const [pendingApprovals, setPendingApprovals] = useState<any[]>([])
+  const [loadingApprovals, setLoadingApprovals] = useState(false)
 
   // Load case data on mount
   useEffect(() => {
@@ -71,6 +87,9 @@ export default function CaseDetailPage() {
       loadFacts()
       loadDesiredOutcomes()
       loadStrategies()
+      loadTasks()
+      loadArtifacts()
+      loadPendingApprovals()
     }
   }, [params.id, hasLoaded])
 
@@ -90,45 +109,6 @@ export default function CaseDetailPage() {
       if (response.data) {
         setCaseData(response.data)
         setTeamMembers(response.data.team_members || [])
-        
-        // Generate mock tasks based on case data for now
-        // TODO: Replace with real tasks API when tasks app is implemented
-        const mockTasks = [
-    {
-      id: 1,
-            title: `Review documents for ${response.data.title}`,
-            description: "Analyze case documents and identify key evidence",
-            assignedBy: response.data.created_by?.full_name || "System",
-            dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      priority: "High",
-      status: "In Progress",
-      submissionStatus: "Draft",
-            lastUpdated: new Date().toISOString().split('T')[0],
-    },
-    {
-      id: 2,
-            title: `Prepare case strategy for ${response.data.title}`,
-            description: "Develop comprehensive legal strategy and timeline",
-            assignedBy: response.data.created_by?.full_name || "System",
-            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      priority: "High",
-      status: "Pending",
-      submissionStatus: "Not Started",
-            lastUpdated: new Date().toISOString().split('T')[0],
-    },
-    {
-      id: 3,
-            title: `Research legal precedents`,
-            description: `Find similar cases in ${response.data.jurisdiction} jurisdiction`,
-            assignedBy: response.data.created_by?.full_name || "System",
-            dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      priority: "Medium",
-      status: "Completed",
-      submissionStatus: "Approved",
-            lastUpdated: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          },
-        ]
-        setMyTasks(mockTasks)
       } else {
         setError("Case not found")
       }
@@ -193,16 +173,196 @@ export default function CaseDetailPage() {
       const apiClient = getApiClient()
       const response = await apiClient.get(`/api/strategies/case/${params.id}/`)
       
+      let strategiesData = []
       if (response.data && response.data.results) {
-        setStrategies(response.data.results)
+        strategiesData = response.data.results
       } else if (response.data) {
-        setStrategies(response.data)
+        strategiesData = response.data
       }
+      
+      // Ensure strategy_data is parsed if it comes as a string
+      const parsedStrategies = strategiesData.map((strategy: any) => {
+        if (strategy.strategy_data && typeof strategy.strategy_data === 'string') {
+          try {
+            strategy.strategy_data = JSON.parse(strategy.strategy_data)
+          } catch (e) {
+            console.error('Failed to parse strategy_data:', e)
+          }
+        }
+        return strategy
+      })
+      
+      setStrategies(parsedStrategies)
     } catch (error: any) {
       console.error('Failed to load strategies:', error)
       // Don't show error toast for strategies as it's not critical
     } finally {
       setLoadingStrategies(false)
+    }
+  }
+
+  const loadTasks = async () => {
+    try {
+      const apiClient = getApiClient()
+      const response = await apiClient.get(`/api/tasks/case/${params.id}/`)
+      if (response.data && response.data.results) {
+        console.log(response.data.results, "lllllll")
+        setMyTasks(response.data.results)
+      } else if (response.data) {
+        setMyTasks(response.data)
+      }
+    } catch (error: any) {
+      console.error('Failed to load tasks:', error)
+    }
+  }
+
+  const handleConvertStepToTask = async (strategy: any, step: any, stepIndex: number) => {
+    const stepKey = `${strategy.id}-${stepIndex}`
+    
+    // Check if already converted
+    if (convertedSteps.has(stepKey)) {
+      toast({
+        variant: "destructive",
+        title: "Already Converted",
+        description: "This step has already been converted to a task.",
+      })
+      return
+    }
+
+    setConvertingStep({ strategyId: strategy.id, stepIndex })
+    
+    try {
+      const apiClient = getApiClient()
+      
+      // Create task from step
+      const taskData = {
+        title: `${strategy.title} - Step ${step.step || stepIndex + 1}`,
+        description: step.action,
+        task_type: 'task',
+        priority: strategy.priority || 'medium',
+        due_date: null, // Could calculate based on timeline
+        notes: `Converted from strategy: ${strategy.title}\nTimeline: ${step.timeline || 'Not specified'}\nResponsible: ${step.responsible || 'Not specified'}`
+      }
+      
+      const response = await apiClient.post(`/api/tasks/case/${params.id}/create/`, taskData)
+      
+      if (response.data) {
+        // Mark step as converted
+        setConvertedSteps(prev => new Set([...prev, stepKey]))
+        
+        toast({
+          title: "Task Created Successfully",
+          description: `Step ${step.step || stepIndex + 1} has been converted to a task.`,
+        })
+        
+        // Reload tasks
+        loadTasks()
+      }
+    } catch (error: any) {
+      console.error('Failed to convert step to task:', error)
+      toast({
+        variant: "destructive",
+        title: "Failed to Create Task",
+        description: "Could not convert this step to a task. Please try again.",
+      })
+    } finally {
+      setConvertingStep(null)
+    }
+  }
+
+  const loadArtifacts = async () => {
+    try {
+      const apiClient = getApiClient()
+      const response = await apiClient.get(`/api/documents/case/${params.id}/`)
+      if (response.data && response.data.results) {
+        setArtifacts(response.data.results)
+      } else if (response.data) {
+        setArtifacts(response.data)
+      }
+    } catch (error: any) {
+      console.error('Failed to load artifacts:', error)
+    }
+  }
+
+  const loadPendingApprovals = async () => {
+    try {
+      setLoadingApprovals(true)
+      const apiClient = getApiClient()
+      const response = await apiClient.get(`/api/tasks/approvals/pending/?case_id=${params.id}`)
+      if (response.data && response.data.submissions) {
+        setPendingApprovals(response.data.submissions)
+      }
+    } catch (error: any) {
+      console.error('Failed to load pending approvals:', error)
+    } finally {
+      setLoadingApprovals(false)
+    }
+  }
+
+  const handleApproveSubmission = async (submissionId: number, comments: string = '') => {
+    try {
+      const apiClient = getApiClient()
+      await apiClient.post(`/api/tasks/submissions/${submissionId}/approve/`, { comments })
+      
+      toast({
+        title: "Submission Approved",
+        description: "The submission has been approved successfully.",
+      })
+      
+      // Reload approvals and tasks
+      loadPendingApprovals()
+      loadTasks()
+    } catch (error: any) {
+      console.error('Failed to approve submission:', error)
+      toast({
+        variant: "destructive",
+        title: "Approval Failed",
+        description: error.message || "Could not approve the submission. Please try again.",
+      })
+    }
+  }
+
+  const handleRejectSubmission = async (submissionId: number, reason: string, comments: string = '') => {
+    try {
+      const apiClient = getApiClient()
+      await apiClient.post(`/api/tasks/submissions/${submissionId}/reject/`, { reason, comments })
+      
+      toast({
+        title: "Submission Rejected",
+        description: "The submission has been rejected.",
+      })
+      
+      // Reload approvals
+      loadPendingApprovals()
+    } catch (error: any) {
+      console.error('Failed to reject submission:', error)
+      toast({
+        variant: "destructive",
+        title: "Rejection Failed",
+        description: error.message || "Could not reject the submission. Please try again.",
+      })
+    }
+  }
+
+  const handleDeleteSubmission = async (submissionId: number) => {
+    try {
+      const apiClient = getApiClient()
+      await apiClient.delete(`/api/tasks/submissions/${submissionId}/delete/`)
+      
+      toast({
+        title: "Submission Deleted",
+        description: "The submission has been deleted successfully.",
+      })
+      
+      // Reload approvals
+      loadPendingApprovals()
+    } catch (error: any) {
+      console.error('Failed to delete submission:', error)
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: error.message || "Could not delete the submission. Please try again.",
+      })
     }
   }
 
@@ -233,182 +393,6 @@ export default function CaseDetailPage() {
       .toUpperCase()
       .slice(0, 2)
   }
-
-  const myApprovals = [
-    {
-      id: 1,
-      type: "Document",
-      title: "Financial Records Analysis",
-      submittedBy: "Mike Chen",
-      submittedDate: "2024-01-07",
-      status: "Pending Review",
-      description: "Comprehensive analysis of client's financial damages",
-    },
-    {
-      id: 2,
-      type: "Report",
-      title: "Witness Interview Summary",
-      submittedBy: "Lisa Brown",
-      submittedDate: "2024-01-06",
-      status: "Approved",
-      description: "Summary of key witness interviews and statements",
-    },
-    {
-      id: 3,
-      type: "Strategy",
-      title: "Settlement Negotiation Strategy",
-      submittedBy: "Sarah Wilson",
-      submittedDate: "2024-01-05",
-      status: "Needs Revision",
-      description: "Proposed approach for settlement negotiations",
-    },
-  ]
-
-  const courtDates = [
-    {
-      id: 1,
-      type: "Hearing",
-      title: "Motion for Summary Judgment",
-      date: "2024-01-15",
-      time: "10:00 AM",
-      location: "Courtroom 3A, Superior Court of California",
-      status: "Scheduled",
-      judge: "Hon. Patricia Martinez",
-    },
-    {
-      id: 2,
-      type: "Deposition",
-      title: "Plaintiff Deposition",
-      date: "2024-01-18",
-      time: "2:00 PM",
-      location: "Smith & Associates Conference Room",
-      status: "Scheduled",
-      judge: "N/A",
-    },
-    {
-      id: 3,
-      type: "Hearing",
-      title: "Case Management Conference",
-      date: "2023-12-20",
-      time: "9:00 AM",
-      location: "Courtroom 2B, Superior Court of California",
-      status: "Completed",
-      judge: "Hon. Patricia Martinez",
-    },
-  ]
-
-  const adjournments = [
-    {
-      id: 1,
-      originalDate: "2023-12-15",
-      newDate: "2024-01-15",
-      reason: "Opposing counsel requested additional time for discovery",
-      requestedBy: "Defense",
-      approvedBy: "Hon. Patricia Martinez",
-      approvedDate: "2023-12-10",
-    },
-  ]
-
-  const teamReports = [
-    {
-      id: 1,
-      title: "Contract Analysis Report",
-      author: "Sarah Wilson",
-      submittedDate: "2024-01-08",
-      approvedDate: "2024-01-08",
-      status: "Published",
-      type: "Analysis",
-      summary: "Detailed analysis of contract terms and breach elements",
-    },
-    {
-      id: 2,
-      title: "Discovery Phase Summary",
-      author: "Mike Chen",
-      submittedDate: "2024-01-06",
-      approvedDate: "2024-01-07",
-      status: "Published",
-      type: "Summary",
-      summary: "Summary of documents and evidence collected during discovery",
-    },
-    {
-      id: 3,
-      title: "Witness Statement Compilation",
-      author: "Lisa Brown",
-      submittedDate: "2024-01-05",
-      approvedDate: "2024-01-06",
-      status: "Published",
-      type: "Evidence",
-      summary: "Compiled witness statements and testimony summaries",
-    },
-  ]
-
-  const publishedStrategies = [
-    {
-      id: 1,
-      title: "Primary Litigation Strategy",
-      author: "John Smith",
-      publishedDate: "2024-01-08",
-      category: "Litigation",
-      summary: "Focus on contract breach elements and damages calculation",
-      keyPoints: [
-        "Establish clear timeline of breach events",
-        "Document financial impact with expert testimony",
-        "Pursue both compensatory and consequential damages",
-      ],
-    },
-    {
-      id: 2,
-      title: "Settlement Negotiation Approach",
-      author: "Sarah Wilson",
-      publishedDate: "2024-01-07",
-      category: "Settlement",
-      summary: "Strategic approach for potential settlement discussions",
-      keyPoints: [
-        "Start with 80% of claimed damages",
-        "Emphasize strength of breach evidence",
-        "Consider structured payment terms",
-      ],
-    },
-  ]
-
-  const artifacts = [
-    {
-      id: 1,
-      title: "Service Agreement (Original)",
-      type: "Contract",
-      dateAdded: "2023-12-01",
-      addedBy: "John Smith",
-      status: "Approved",
-      description: "Original service agreement between parties",
-    },
-    {
-      id: 2,
-      title: "Breach Notice Letter",
-      type: "Legal Notice",
-      dateAdded: "2024-01-05",
-      addedBy: "Sarah Wilson",
-      status: "Approved",
-      description: "Formal notice of contract breach sent to defendant",
-    },
-    {
-      id: 3,
-      title: "Financial Damage Assessment",
-      type: "Analysis",
-      dateAdded: "2024-01-07",
-      addedBy: "Mike Chen",
-      status: "Approved",
-      description: "Comprehensive financial impact analysis",
-    },
-    {
-      id: 4,
-      title: "Expert Witness Report",
-      type: "Expert Opinion",
-      dateAdded: "2024-01-08",
-      addedBy: "Lisa Brown",
-      status: "Under Review",
-      description: "Technical expert analysis of software development issues",
-    },
-  ]
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -489,6 +473,14 @@ export default function CaseDetailPage() {
         <DashboardHeader />
 
       <main className="container mx-auto px-4 py-8">
+        {/* Breadcrumbs */}
+        <Breadcrumbs 
+          items={[
+            { label: "Cases", href: "/cases" },
+            { label: caseData?.title || "Case Details" }
+          ]}
+        />
+
         {/* Case Header */}
         <div className="mb-8">
           <div className="flex items-start justify-between mb-4">
@@ -497,9 +489,14 @@ export default function CaseDetailPage() {
               <p className="text-gray-600 mt-1">Case #{caseData.quick_stats?.case_number || caseData.reference_number}</p>
             </div>
             <div className="flex items-center space-x-2">
-              <RegenerateCaseDialog 
+              <InviteToCaseModal 
                 caseId={params.id as string}
-                caseTitle={caseData.title}
+                onInviteSent={() => {
+                  toast({
+                    title: "Invitation Sent",
+                    description: "The user has been invited to this case.",
+                  })
+                }}
               />
               <Button variant="outline" size="sm" disabled>
                     <Download className="h-4 w-4 mr-2" />
@@ -565,7 +562,9 @@ export default function CaseDetailPage() {
           <TabsList className="grid w-full grid-cols-9">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="my-tasks">My Tasks</TabsTrigger>
-            <TabsTrigger value="approvals">Approvals</TabsTrigger>
+            <TabsTrigger value="approvals">
+              Approvals {pendingApprovals.length > 0 && `(${pendingApprovals.length})`}
+            </TabsTrigger>
             <TabsTrigger value="facts">Facts</TabsTrigger>
             <TabsTrigger value="desired-outcomes">Outcomes</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
@@ -762,9 +761,15 @@ export default function CaseDetailPage() {
 
           <TabsContent value="my-tasks" className="space-y-6">
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
                 <CardTitle>My Tasks</CardTitle>
                 <CardDescription>Tasks assigned to you for this case</CardDescription>
+                </div>
+                <AddTaskModal 
+                  caseId={params.id as string}
+                  onTaskAdded={loadTasks}
+                />
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -785,7 +790,6 @@ export default function CaseDetailPage() {
                         </div>
                         <div className="flex flex-col items-end space-y-2">
                           <Badge variant={getPriorityColor(task.priority)}>{task.priority}</Badge>
-                          <Badge variant={getStatusColor(task.submissionStatus)}>{task.submissionStatus}</Badge>
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
@@ -795,10 +799,18 @@ export default function CaseDetailPage() {
                                 task={task}
                                 onSubmissionUpdate={loadCaseData}
                               />
-                          <Button size="sm" variant="ghost">
-                                <Eye className="h-4 w-4 mr-2" />
-                            View Details
+                          <DeleteConfirmation
+                            type="task"
+                            id={task.id}
+                            title={task.title}
+                            onDelete={loadTasks}
+                            trigger={
+                              <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                                <Archive className="h-4 w-4 mr-2" />
+                                Delete
                           </Button>
+                            }
+                          />
                         </div>
                       </div>
                     </div>
@@ -813,50 +825,49 @@ export default function CaseDetailPage() {
           <TabsContent value="approvals" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>My Approvals</CardTitle>
-                <CardDescription>Items requiring your approval</CardDescription>
+                <CardTitle>Pending Approvals</CardTitle>
+                <CardDescription>
+                  Task submissions requiring your approval
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {myApprovals.map((approval) => (
-                    <div key={approval.id} className="border rounded-lg p-4 space-y-3">
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center space-x-2">
-                            <h4 className="font-medium">{approval.title}</h4>
-                            <Badge variant="outline">{approval.type}</Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">{approval.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Submitted by {approval.submittedBy} on {approval.submittedDate}
-                          </p>
-                        </div>
-                        <Badge variant={getStatusColor(approval.status)}>{approval.status}</Badge>
+                {loadingApprovals ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Loading approvals...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {pendingApprovals.length > 0 ? (
+                      pendingApprovals.map((submission) => (
+                        <SubmissionApprovalCard
+                          key={submission.id}
+                          submission={submission}
+                          currentUserId={user?.uid}
+                          onApprove={handleApproveSubmission}
+                          onReject={handleRejectSubmission}
+                          onDelete={handleDeleteSubmission}
+                        />
+                      ))
+                    ) : (
+                      <div className="text-center py-12">
+                        <ThumbsUp className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                        <p className="text-sm text-muted-foreground">
+                          No submissions pending approval
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Submissions from your assigned tasks will appear here
+                        </p>
                       </div>
-                      {approval.status === "Pending Review" && (
-                        <div className="flex space-x-2">
-                          <Button size="sm" variant="default">
-                            <ThumbsUp className="h-4 w-4 mr-2" />
-                            Approve
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            <ThumbsDown className="h-4 w-4 mr-2" />
-                            Request Changes
-                          </Button>
-                          <Button size="sm" variant="ghost">
-                            View Details
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="facts" className="space-y-6">
-            <Card>
+              <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center">
@@ -869,34 +880,25 @@ export default function CaseDetailPage() {
                   caseId={params.id as string}
                   onFactChange={loadFacts}
                 />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+                </CardHeader>
+                <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {facts.length > 0 ? facts.map((fact) => (
-                    <div key={fact.id} className="border rounded-lg p-4 space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="text-sm leading-relaxed">{fact.fact_text}</p>
-                          <div className="flex items-center space-x-4 mt-2 text-xs text-muted-foreground">
-                            <Badge variant="outline" className="text-xs">
-                              {fact.source_type === 'AI_GENERATED' ? 'AI Generated' : 
-                               fact.source_type === 'USER_GENERATED' ? 'User Generated' :
-                               'User Modified'}
-                            </Badge>
-                            <span>Created: {formatDate(fact.created_at)}</span>
-                            {fact.is_modified && (
-                              <span>Modified by: {fact.modified_by?.full_name || 'Unknown'}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex space-x-2 ml-4">
+                    <div key={fact.id} className="border rounded-lg p-4 space-y-2 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-2">
+                        <Badge variant="outline" className="text-xs">
+                          {fact.source_type === 'AI_GENERATED' ? 'AI Generated' : 
+                           fact.source_type === 'USER_GENERATED' ? 'User Generated' :
+                           'User Modified'}
+                        </Badge>
+                        <div className="flex space-x-1">
                           <CaseFactModal 
                             caseId={params.id as string}
                             fact={fact}
                             onFactChange={loadFacts}
                             trigger={
-                              <Button size="sm" variant="ghost">
-                                <Edit className="h-4 w-4" />
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                <Edit className="h-3 w-3" />
                               </Button>
                             }
                           />
@@ -906,30 +908,48 @@ export default function CaseDetailPage() {
                             title={fact.fact_text}
                             onDelete={loadFacts}
                             trigger={
-                              <Button size="sm" variant="ghost">
-                                <Archive className="h-4 w-4" />
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                <Archive className="h-3 w-3" />
                               </Button>
                             }
                           />
                         </div>
                       </div>
-                    </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <p className="text-sm leading-relaxed line-clamp-3 cursor-pointer hover:text-blue-600">
+                            {fact.fact_text}
+                          </p>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80">
+                          <div className="space-y-2">
+                            <p className="text-sm leading-relaxed">{fact.fact_text}</p>
+                            <div className="flex flex-col space-y-1 text-xs text-muted-foreground pt-2 border-t">
+                              <span>Created: {formatDate(fact.created_at)}</span>
+                              {fact.is_modified && (
+                                <span>Modified by: {fact.modified_by?.full_name || 'Unknown'}</span>
+                            )}
+                          </div>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                        </div>
                   )) : (
-                    <div className="text-center py-8">
+                    <div className="col-span-full text-center py-8">
                       <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                       <p className="text-muted-foreground">No facts available for this case yet.</p>
                       <p className="text-sm text-muted-foreground mt-1">
                         Facts are automatically generated when a case is created, or you can add them manually.
                       </p>
-                    </div>
+                      </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
+                  </div>
+                </CardContent>
+              </Card>
           </TabsContent>
 
           <TabsContent value="desired-outcomes" className="space-y-6">
-            <Card>
+              <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center">
@@ -942,37 +962,32 @@ export default function CaseDetailPage() {
                   caseId={params.id as string}
                   onOutcomeChange={loadDesiredOutcomes}
                 />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+                </CardHeader>
+                <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {desiredOutcomes.length > 0 ? desiredOutcomes.map((outcome) => (
-                    <div key={outcome.id} className="border rounded-lg p-4 space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="text-sm leading-relaxed">{outcome.description}</p>
-                          <div className="flex items-center space-x-4 mt-2 text-xs text-muted-foreground">
-                            <span>Created by: {outcome.created_by?.full_name || 'Unknown'}</span>
-                            <span>Created: {formatDate(outcome.created_at)}</span>
-                            {outcome.vector_db_indexed && (
-                              <Badge variant="outline" className="text-xs text-green-600">
-                                Indexed
-                              </Badge>
-                            )}
-                            {outcome.vector_indexing_failed && (
-                              <Badge variant="outline" className="text-xs text-red-600">
-                                Index Failed
-                              </Badge>
-                            )}
-                          </div>
+                    <div key={outcome.id} className="border rounded-lg p-4 space-y-2 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          {outcome.vector_db_indexed && (
+                            <Badge variant="outline" className="text-xs text-green-600">
+                              Indexed
+                            </Badge>
+                          )}
+                          {outcome.vector_indexing_failed && (
+                            <Badge variant="outline" className="text-xs text-red-600">
+                              Index Failed
+                            </Badge>
+                          )}
                         </div>
-                        <div className="flex space-x-2 ml-4">
+                        <div className="flex space-x-1">
                           <DesiredOutcomeModal 
                             caseId={params.id as string}
                             outcome={outcome}
                             onOutcomeChange={loadDesiredOutcomes}
                             trigger={
-                              <Button size="sm" variant="ghost">
-                                <Edit className="h-4 w-4" />
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                <Edit className="h-3 w-3" />
                               </Button>
                             }
                           />
@@ -982,16 +997,32 @@ export default function CaseDetailPage() {
                             title={outcome.description}
                             onDelete={loadDesiredOutcomes}
                             trigger={
-                              <Button size="sm" variant="ghost">
-                                <Archive className="h-4 w-4" />
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                <Archive className="h-3 w-3" />
                               </Button>
                             }
                           />
                         </div>
                       </div>
-                    </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <p className="text-sm leading-relaxed line-clamp-3 cursor-pointer hover:text-blue-600">
+                            {outcome.description}
+                          </p>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80">
+                          <div className="space-y-2">
+                            <p className="text-sm leading-relaxed">{outcome.description}</p>
+                            <div className="flex flex-col space-y-1 text-xs text-muted-foreground pt-2 border-t">
+                              <span>Created by: {outcome.created_by?.full_name || 'Unknown'}</span>
+                              <span>Created: {formatDate(outcome.created_at)}</span>
+                          </div>
+                        </div>
+                        </PopoverContent>
+                      </Popover>
+                      </div>
                   )) : (
-                    <div className="text-center py-8">
+                    <div className="col-span-full text-center py-8">
                       <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                       <p className="text-muted-foreground">No desired outcomes defined for this case yet.</p>
                       <p className="text-sm text-muted-foreground mt-1">
@@ -999,9 +1030,9 @@ export default function CaseDetailPage() {
                       </p>
                     </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
+                  </div>
+                </CardContent>
+              </Card>
           </TabsContent>
 
           <TabsContent value="reports" className="space-y-6">
@@ -1012,7 +1043,7 @@ export default function CaseDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {teamReports.map((report) => (
+                  {reports.length > 0 ? reports.map((report) => (
                     <div key={report.id} className="border rounded-lg p-4 space-y-3">
                       <div className="flex items-start justify-between">
                         <div className="space-y-1">
@@ -1036,7 +1067,11 @@ export default function CaseDetailPage() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">No reports have been published for this case yet.</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1058,13 +1093,13 @@ export default function CaseDetailPage() {
                     <span>Loading strategies...</span>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                <div className="space-y-6">
                     {strategies.length > 0 ? strategies.map((strategy) => (
-                      <div key={strategy.id} className="border rounded-lg p-4 space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-2">
-                            <div className="flex items-center space-x-2">
-                              <h4 className="font-medium">{strategy.title}</h4>
+                    <div key={strategy.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-medium">{strategy.title}</h4>
                               <Badge variant="outline">{strategy.strategy_type?.replace('_', ' ')}</Badge>
                               <Badge variant={
                                 strategy.priority === 'urgent' ? 'destructive' :
@@ -1073,31 +1108,208 @@ export default function CaseDetailPage() {
                               }>
                                 {strategy.priority}
                               </Badge>
-                            </div>
+                          </div>
                             <p className="text-sm text-muted-foreground">{strategy.description}</p>
                             {strategy.key_points && strategy.key_points.length > 0 && (
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground">Key Points:</p>
-                                <ul className="text-xs text-muted-foreground space-y-1">
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground">Key Points:</p>
+                            <ul className="text-xs text-muted-foreground space-y-1">
                                   {strategy.key_points.map((point: string, index: number) => (
-                                    <li key={index} className="flex items-start">
-                                      <span className="mr-2">•</span>
-                                      <span>{point}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
+                                <li key={index} className="flex items-start">
+                                  <span className="mr-2">•</span>
+                                  <span>{point}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                             )}
                             <div className="flex items-center space-x-4 text-xs text-muted-foreground">
                               <span>Generated: {formatDate(strategy.created_at)}</span>
                               <span>Confidence: {Math.round((strategy.confidence || 0.7) * 100)}%</span>
                               <span>Status: {strategy.status}</span>
-                            </div>
+                        </div>
                           </div>
-                          <Button size="sm" variant="ghost">
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </Button>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                        <Button size="sm" variant="ghost">
+                          <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                        </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                              <DialogHeader>
+                                <DialogTitle>{strategy.title}</DialogTitle>
+                                <DialogDescription>
+                                  AI-Generated Strategy • {strategy.strategy_type?.replace('_', ' ')}
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div>
+                                  <h4 className="font-medium text-sm mb-2">Description</h4>
+                                  <p className="text-sm text-muted-foreground">{strategy.description}</p>
+                                </div>
+                                
+                                {/* Implementation Steps with Timeline */}
+                                {strategy.strategy_data?.steps && strategy.strategy_data.steps.length > 0 && (
+                                  <div className="border rounded-lg p-6 bg-gradient-to-br from-blue-50 to-indigo-50">
+                                    <h4 className="font-medium text-base mb-6 flex items-center text-blue-900">
+                                      <Calendar className="h-5 w-5 mr-2" />
+                                      Implementation Timeline
+                                    </h4>
+                                    <div className="relative">
+                                      {/* Vertical Timeline Line */}
+                                      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-blue-300"></div>
+                                      
+                                      <div className="space-y-6">
+                                        {strategy.strategy_data.steps.map((step: any, index: number) => (
+                                          <div key={index} className="relative pl-12">
+                                            {/* Timeline Dot */}
+                                            <div className="absolute left-0 top-1 w-8 h-8 rounded-full bg-blue-500 border-4 border-blue-100 flex items-center justify-center shadow-md z-10">
+                                              <span className="text-white text-xs font-bold">{step.step || index + 1}</span>
+                                            </div>
+                                            
+                                            {/* Step Content Card */}
+                                            <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-200 hover:shadow-md transition-shadow">
+                                              <div className="flex items-start justify-between mb-2">
+                                                <div className="flex-1">
+                                                  <div className="flex items-center gap-2 mb-2">
+                                                    <h5 className="font-semibold text-sm text-blue-900">Step {step.step || index + 1}</h5>
+                                                    {step.timeline && (
+                                                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                                                        <Clock className="h-3 w-3 mr-1" />
+                                                        {step.timeline}
+                                                      </Badge>
+                                                    )}
+                                                  </div>
+                                                  <p className="text-sm text-gray-700 leading-relaxed">{step.action}</p>
+                                                </div>
+                                              </div>
+                                              
+                                              <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                                                {step.responsible && (
+                                                  <div className="flex items-center text-xs text-gray-600 bg-gray-50 px-3 py-1.5 rounded-full">
+                                                    <Users className="h-3.5 w-3.5 mr-1.5 text-blue-600" />
+                                                    <span className="font-medium">Responsible:</span>
+                                                    <span className="ml-1 capitalize">{step.responsible}</span>
+                                                  </div>
+                                                )}
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  className={`text-xs ${convertedSteps.has(`${strategy.id}-${index}`) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                  onClick={() => handleConvertStepToTask(strategy, step, index)}
+                                                  disabled={convertedSteps.has(`${strategy.id}-${index}`) || (convertingStep?.strategyId === strategy.id && convertingStep?.stepIndex === index)}
+                                                >
+                                                  {convertedSteps.has(`${strategy.id}-${index}`) ? (
+                                                    <>✓ Converted</>
+                                                  ) : convertingStep?.strategyId === strategy.id && convertingStep?.stepIndex === index ? (
+                                                    <>Converting...</>
+                                                  ) : (
+                                                    <>Convert to Task</>
+                                                  )}
+                                                </Button>
+                                              </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Risks */}
+                                {strategy.strategy_data?.risks && strategy.strategy_data.risks.length > 0 && (
+                                  <div className="border rounded-lg p-4 bg-orange-50">
+                                    <h4 className="font-medium text-sm mb-3 flex items-center text-orange-700">
+                                      <AlertTriangle className="h-4 w-4 mr-2" />
+                                      Potential Risks
+                                    </h4>
+                                    <ul className="text-sm space-y-2">
+                                      {strategy.strategy_data.risks.map((risk: string, index: number) => (
+                                        <li key={index} className="flex items-start bg-white p-2 rounded">
+                                          <span className="mr-2 text-orange-500">⚠️</span>
+                                          <span className="text-muted-foreground capitalize">{risk}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {/* Resources Needed */}
+                                {strategy.strategy_data?.resources_needed && strategy.strategy_data.resources_needed.length > 0 && (
+                                  <div className="border rounded-lg p-4 bg-green-50">
+                                    <h4 className="font-medium text-sm mb-3 flex items-center text-green-700">
+                                      <FileText className="h-4 w-4 mr-2" />
+                                      Resources Needed
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      {strategy.strategy_data.resources_needed.map((resource: string, index: number) => (
+                                        <Badge key={index} variant="secondary" className="capitalize">
+                                          {resource}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Success Metrics */}
+                                {strategy.strategy_data?.success_metrics && strategy.strategy_data.success_metrics.length > 0 && (
+                                  <div className="border rounded-lg p-4 bg-purple-50">
+                                    <h4 className="font-medium text-sm mb-3 flex items-center text-purple-700">
+                                      <Target className="h-4 w-4 mr-2" />
+                                      Success Metrics
+                                    </h4>
+                                    <ul className="text-sm space-y-2">
+                                      {strategy.strategy_data.success_metrics.map((metric: string, index: number) => (
+                                        <li key={index} className="flex items-start bg-white p-2 rounded">
+                                          <span className="mr-2">✓</span>
+                                          <span className="text-muted-foreground capitalize">{metric}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t">
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Priority</p>
+                                    <Badge variant={
+                                      strategy.priority === 'urgent' ? 'destructive' :
+                                      strategy.priority === 'high' ? 'default' :
+                                      'secondary'
+                                    }>
+                                      {strategy.priority}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Status</p>
+                                    <p className="text-sm font-medium capitalize">{strategy.status}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Confidence Score</p>
+                                    <p className="text-sm font-medium">{Math.round((strategy.confidence || 0.7) * 100)}%</p>
+                                  </div>
+                                  {strategy.strategy_data?.estimated_duration && (
+                                    <div>
+                                      <p className="text-xs text-muted-foreground">Estimated Duration</p>
+                                      <p className="text-sm font-medium capitalize">{strategy.strategy_data.estimated_duration}</p>
+                                    </div>
+                                  )}
+                                  {strategy.strategy_data?.cost_estimate && (
+                                    <div>
+                                      <p className="text-xs text-muted-foreground">Cost Estimate</p>
+                                      <Badge variant="outline" className="capitalize">
+                                        {strategy.strategy_data.cost_estimate}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Generated</p>
+                                    <p className="text-sm font-medium">{formatDate(strategy.created_at)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
                         </div>
                       </div>
                     )) : (
@@ -1121,15 +1333,20 @@ export default function CaseDetailPage() {
                 <div>
                   <CardTitle className="flex items-center">
                     <Archive className="h-5 w-5 mr-2" />
-                    Case Artifacts
+                    Artifacts
                   </CardTitle>
-                  <CardDescription>Important documents and evidence for this case</CardDescription>
+                  <CardDescription>
+                    All documents and evidence related to this case.
+                  </CardDescription>
                 </div>
-                <AddArtifactDialog onArtifactAdded={(artifact) => console.log("Artifact added:", artifact)} />
+                <AddArtifactDialog 
+                  caseId={params.id as string}
+                  onArtifactAdded={loadArtifacts} 
+                />
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {artifacts.map((artifact) => (
+                  {artifacts.length > 0 ? artifacts.map((artifact) => (
                     <div key={artifact.id} className="border rounded-lg p-4 space-y-2">
                       <div className="flex items-start justify-between">
                         <div className="space-y-1">
@@ -1151,7 +1368,11 @@ export default function CaseDetailPage() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">No artifacts have been added to this case yet.</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

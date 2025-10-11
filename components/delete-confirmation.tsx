@@ -18,7 +18,7 @@ import { getApiClient } from "@/lib/api-client"
 import { useToast } from "@/lib/use-toast"
 
 interface DeleteConfirmationProps {
-  type: "fact" | "outcome"
+  type: "fact" | "outcome" | "task"
   id: number
   title: string
   onDelete: () => void
@@ -45,14 +45,38 @@ export function DeleteConfirmation({ type, id, title, onDelete, trigger }: Delet
     document.body.style.pointerEvents = 'auto'
   }
 
+  const getEndpoint = () => {
+    switch (type) {
+      case "fact":
+        return `/api/cases/facts/${id}/`
+      case "outcome":
+        return `/api/cases/desired-outcomes/${id}/`
+      case "task":
+        return `/api/tasks/${id}/`
+      default:
+        return ""
+    }
+  }
+
+  const getTypeName = () => {
+    switch (type) {
+      case "fact":
+        return "Fact"
+      case "outcome":
+        return "Desired outcome"
+      case "task":
+        return "Task"
+      default:
+        return ""
+    }
+  }
+
   const handleDelete = async () => {
     setIsLoading(true)
     
     try {
       const apiClient = getApiClient()
-      const endpoint = type === "fact" 
-        ? `/api/cases/facts/${id}/`
-        : `/api/cases/desired-outcomes/${id}/`
+      const endpoint = getEndpoint()
       
       const response = await apiClient.delete(endpoint)
       
@@ -62,7 +86,7 @@ export function DeleteConfirmation({ type, id, title, onDelete, trigger }: Delet
       
       toast({
         title: "Success",
-        description: `${type === "fact" ? "Fact" : "Desired outcome"} deleted successfully`
+        description: `${getTypeName()} deleted successfully`
       })
       
       // Complete reset of modal state
@@ -102,9 +126,9 @@ export function DeleteConfirmation({ type, id, title, onDelete, trigger }: Delet
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete {type === "fact" ? "Fact" : "Desired Outcome"}</AlertDialogTitle>
+          <AlertDialogTitle>Delete {getTypeName()}</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete this {type === "fact" ? "fact" : "desired outcome"}? 
+            Are you sure you want to delete "{title}"? 
             This action cannot be undone.
             {type === "outcome" && " The outcome will also be removed from the vector database and case memory."}
           </AlertDialogDescription>

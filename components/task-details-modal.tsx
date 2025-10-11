@@ -28,8 +28,8 @@ import {
   Calendar,
   User,
   Clock,
-  Target,
   MessageSquare,
+  Target,
   Paperclip,
   CheckCircle,
   XCircle,
@@ -41,6 +41,9 @@ import {
 import { useToast } from "@/lib/use-toast"
 import { getApiClient, isSuccessResponse } from "@/lib/api-client"
 import { TaskSubmissionModal } from "@/components/task-submission-modal"
+import { CommentsSection } from "@/components/comments-section"
+import { useAuth } from "@/contexts/auth-context"
+import { Textarea } from "@/components/ui/textarea"
 
 interface Task {
   id: number
@@ -55,7 +58,10 @@ interface Task {
   case_id: number
   case_title: string
   created_by_name: string
+  created_by: number
   assigned_to_name: string
+  assigned_to: number
+  assigned_to_me: boolean
   created_at: string
   updated_at: string
   notes?: string
@@ -107,7 +113,9 @@ interface TaskDetailsModalProps {
 }
 
 export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsModalProps) {
+  console.log(task, "LLL")
   const { toast } = useToast()
+  const { user } = useAuth()
   
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
@@ -115,6 +123,12 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false)
   const [expandedSubmission, setExpandedSubmission] = useState<number | null>(null)
+  const [approvingSubmission, setApprovingSubmission] = useState<number | null>(null)
+  const [approvalComments, setApprovalComments] = useState("")
+  const [rejectionReason, setRejectionReason] = useState("")
+  const [rejectionComments, setRejectionComments] = useState("")
+  const [commentsCount, setCommentsCount] = useState(0)
+  const [unreadCommentsCount, setUnreadCommentsCount] = useState(0)
 
   // Load submissions when modal opens
   useEffect(() => {
@@ -147,6 +161,88 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
       })
     } finally {
       setIsLoadingSubmissions(false)
+    }
+  }
+
+  const handleApproveSubmission = async (submissionId: number) => {
+    try {
+      setIsLoading(true)
+      const apiClient = getApiClient()
+      const response = await apiClient.post(`/api/tasks/submissions/${submissionId}/approve/`, {
+        comments: approvalComments
+      })
+      
+      if (isSuccessResponse(response)) {
+        toast({
+          title: "Submission Approved",
+          description: "The submission has been approved successfully.",
+        })
+        setApprovalComments("")
+        setApprovingSubmission(null)
+        loadSubmissions()
+        if (onTaskUpdate) onTaskUpdate()
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Approval Failed",
+          description: response.error || "Could not approve the submission.",
+        })
+      }
+    } catch (error: any) {
+      console.error('Failed to approve submission:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An error occurred while approving the submission.",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRejectSubmission = async (submissionId: number) => {
+    if (!rejectionReason.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Reason Required",
+        description: "Please provide a reason for rejection.",
+      })
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      const apiClient = getApiClient()
+      const response = await apiClient.post(`/api/tasks/submissions/${submissionId}/reject/`, {
+        reason: rejectionReason,
+        comments: rejectionComments
+      })
+      
+      if (isSuccessResponse(response)) {
+        toast({
+          title: "Submission Rejected",
+          description: "The submission has been rejected.",
+        })
+        setRejectionReason("")
+        setRejectionComments("")
+        setApprovingSubmission(null)
+        loadSubmissions()
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Rejection Failed",
+          description: response.error || "Could not reject the submission.",
+        })
+      }
+    } catch (error: any) {
+      console.error('Failed to reject submission:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An error occurred while rejecting the submission.",
+      })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -287,13 +383,20 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="submissions">
               Submissions ({submissions.length})
             </TabsTrigger>
             <TabsTrigger value="artifacts">
               Artifacts ({totalFiles})
+            </TabsTrigger>
+            <TabsTrigger value="comments" className="relative">
+              <MessageSquare className="h-4 w-4 mr-1" />
+              Comments {commentsCount > 0 && `(${commentsCount})`}
+              {unreadCommentsCount > 0 && (
+                <Badge variant="destructive" className="ml-1 text-xs">{unreadCommentsCount}</Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
@@ -339,7 +442,8 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
                                 {task.assigned_to_name?.split(' ').map(n => n[0]).join('') || 'UN'}
                               </AvatarFallback>
                             </Avatar>
-                            {task.assigned_to_name || 'Unassigned'}
+                            
+                            {task.assigned_to_name ? task.assigned_to_name : 'Unassigned'}
                           </div>
                         </div>
                         <div>
@@ -451,18 +555,19 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => deleteSubmission(submission.id)}
-                                disabled={isLoading}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              {submission.status !== 'approved' && submission.submitted_by?.id !== user?.uid && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => deleteSubmission(submission.id)}
+                                  disabled={isLoading}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </CardHeader>
-                        
                         {expandedSubmission === submission.id && (
                           <CardContent className="pt-0">
                             <div className="space-y-4">
@@ -540,6 +645,79 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
                                   <div className="p-3 bg-red-50 border border-red-200 rounded-md text-sm">
                                     {submission.rejection_reason}
                                   </div>
+                                </div>
+                              )}
+
+                              {/* Approval Actions - Only for task creator and pending submissions */}
+                              {submission.status === 'pending' && task.created_by === user?.id && (
+                                <div className="pt-4 border-t space-y-3">
+                                  <div className="text-sm font-medium">Review Submission</div>
+                                  
+                                  {approvingSubmission === submission.id ? (
+                                    <>
+                                      <Textarea
+                                        placeholder="Add comments (optional)..."
+                                        value={approvalComments}
+                                        onChange={(e) => setApprovalComments(e.target.value)}
+                                        rows={2}
+                                      />
+                                      <div className="flex space-x-2">
+                                        <Button
+                                          size="sm"
+                                          onClick={() => handleApproveSubmission(submission.id)}
+                                          disabled={isLoading}
+                                        >
+                                          {isLoading ? (
+                                            <>
+                                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                              Approving...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <CheckCircle className="h-4 w-4 mr-2" />
+                                              Confirm Approval
+                                            </>
+                                          )}
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            setApprovingSubmission(null)
+                                            setApprovalComments("")
+                                          }}
+                                          disabled={isLoading}
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="flex space-x-2">
+                                      <Button
+                                        size="sm"
+                                        variant="default"
+                                        onClick={() => setApprovingSubmission(submission.id)}
+                                      >
+                                        <CheckCircle className="h-4 w-4 mr-2" />
+                                        Approve
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => {
+                                          const reason = prompt("Please provide a reason for rejection:")
+                                          if (reason) {
+                                            setRejectionReason(reason)
+                                            handleRejectSubmission(submission.id)
+                                          }
+                                        }}
+                                      >
+                                        <XCircle className="h-4 w-4 mr-2" />
+                                        Reject
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -665,6 +843,22 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
                       </div>
                     </CardContent>
                   </Card>
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            <TabsContent value="comments" className="h-full">
+              <ScrollArea className="h-full pr-4">
+                <div className="space-y-4">
+                  <CommentsSection
+                    type="task"
+                    entityId={task.id}
+                    title="Task Comments"
+                    onCountChange={(total, unread) => {
+                      setCommentsCount(total)
+                      setUnreadCommentsCount(unread)
+                    }}
+                  />
                 </div>
               </ScrollArea>
             </TabsContent>

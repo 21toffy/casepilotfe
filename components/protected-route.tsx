@@ -4,6 +4,8 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useInactivityTimer } from '@/hooks/use-inactivity-timer'
+import { InactivityWarningDialog } from '@/components/inactivity-warning-dialog'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -18,10 +20,17 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, user } = useAuth()
   const router = useRouter()
+  const { showWarning, countdown, dismissWarning } = useInactivityTimer()
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push(fallbackPath)
+      // Save the current URL to redirect back after login
+      const currentPath = window.location.pathname + window.location.search
+      sessionStorage.setItem('redirectAfterLogin', currentPath)
+      
+      // Add redirect parameter to login URL
+      const redirectParam = encodeURIComponent(currentPath)
+      router.push(`${fallbackPath}?redirect=${redirectParam}`)
     }
   }, [isAuthenticated, isLoading, router, fallbackPath])
 
@@ -54,7 +63,16 @@ export function ProtectedRoute({
     return null // Will redirect in useEffect
   }
 
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      <InactivityWarningDialog 
+        open={showWarning}
+        countdown={countdown}
+        onDismiss={dismissWarning}
+      />
+    </>
+  )
 }
 
 export default ProtectedRoute

@@ -12,6 +12,8 @@ import Link from "next/link"
 import ProtectedRoute from "@/components/protected-route"
 import { useToast } from "@/lib/use-toast"
 import { getApiClient } from "@/lib/api-client"
+import { Breadcrumbs } from "@/components/breadcrumbs"
+import { DashboardHeader } from "@/components/dashboard-header"
 
 // Interface for case data
 interface CaseData {
@@ -76,11 +78,11 @@ export default function CasesPage() {
         params.append('search', searchTerm.trim())
       }
       
-      if (caseTypeFilter) {
+      if (caseTypeFilter && caseTypeFilter !== 'all') {
         params.append('case_type', caseTypeFilter)
       }
       
-      if (statusFilter) {
+      if (statusFilter && statusFilter !== 'all') {
         params.append('status', statusFilter)
       }
 
@@ -149,7 +151,15 @@ export default function CasesPage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
+        <DashboardHeader />
         <div className="container mx-auto px-4 py-8">
+          {/* Breadcrumbs */}
+          <Breadcrumbs 
+            items={[
+              { label: "Cases" }
+            ]}
+          />
+
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
             <div>
@@ -190,7 +200,7 @@ export default function CasesPage() {
                       <SelectValue placeholder="All case types" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All case types</SelectItem>
+                      <SelectItem value="all">All case types</SelectItem>
                       <SelectItem value="corporate">Corporate</SelectItem>
                       <SelectItem value="criminal">Criminal</SelectItem>
                       <SelectItem value="civil">Civil</SelectItem>
@@ -205,7 +215,7 @@ export default function CasesPage() {
                       <SelectValue placeholder="All statuses" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All statuses</SelectItem>
+                      <SelectItem value="all">All statuses</SelectItem>
                       <SelectItem value="open">Open</SelectItem>
                       <SelectItem value="closed">Closed</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>

@@ -19,14 +19,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Upload, X, Plus, File, ImageIcon, Video } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { getApiClient } from "@/lib/api-client"
 
 interface AddArtifactDialogProps {
   trigger?: React.ReactNode
-  onArtifactAdded?: (artifact: any) => void
+  onArtifactAdded: (artifact: any) => void
+  caseId: string
 }
 
-export function AddArtifactDialog({ trigger, onArtifactAdded }: AddArtifactDialogProps) {
-  const [open, setOpen] = useState(false)
+export function AddArtifactDialog({ trigger, onArtifactAdded, caseId }: AddArtifactDialogProps) {
+  const [isOpen, setIsOpen] = useState(false)
   const [formData, setFormData] = useState({
     title: "",
     type: "",
@@ -37,19 +40,55 @@ export function AddArtifactDialog({ trigger, onArtifactAdded }: AddArtifactDialo
   })
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [newTag, setNewTag] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const artifact = {
-      ...formData,
-      files: uploadedFiles,
-      uploadedDate: new Date().toISOString(),
-      status: "Pending Review",
+  const { toast } = useToast()
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    
+    if (uploadedFiles.length === 0) {
+      toast({ variant: "destructive", title: "Please select a file to upload." })
+      return
     }
-    console.log("Adding artifact:", artifact)
-    onArtifactAdded?.(artifact)
-    setOpen(false)
-    resetForm()
+    
+    if (!formData.title || !formData.type) {
+      toast({ variant: "destructive", title: "Please fill in all required fields." })
+      return
+    }
+    
+    setIsLoading(true)
+
+    const uploadData = new FormData()
+    uploadData.append('file', uploadedFiles[0])
+    uploadData.append('title', formData.title)
+    uploadData.append('description', formData.description)
+    uploadData.append('document_type', formData.type)
+    uploadData.append('status', 'uploaded')
+
+    try {
+      const apiClient = getApiClient()
+      // Don't set Content-Type header manually - let the browser set it with the boundary
+      const response = await apiClient.post(`/api/documents/case/${caseId}/`, uploadData)
+
+      if (response.data) {
+        toast({ title: "Artifact uploaded successfully!" })
+        onArtifactAdded(response.data)
+        resetForm()
+        setIsOpen(false)
+      } else {
+        throw new Error("Failed to upload artifact.")
+      }
+    } catch (error: any) {
+      console.error("Artifact upload failed:", error)
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: error.message || "An unexpected error occurred.",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const resetForm = () => {
@@ -100,7 +139,7 @@ export function AddArtifactDialog({ trigger, onArtifactAdded }: AddArtifactDialo
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         {trigger || (
           <Button>
@@ -267,11 +306,11 @@ export function AddArtifactDialog({ trigger, onArtifactAdded }: AddArtifactDialo
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!formData.title || !formData.type}>
-              Add Artifact
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Uploading..." : "Add Artifact"}
             </Button>
           </DialogFooter>
         </form>

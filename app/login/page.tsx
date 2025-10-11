@@ -41,10 +41,30 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Get redirect URL from query params or sessionStorage
+  const getRedirectUrl = () => {
+    // First check URL parameter
+    const urlParams = new URLSearchParams(window.location.search)
+    const redirectParam = urlParams.get('redirect')
+    if (redirectParam) {
+      return decodeURIComponent(redirectParam)
+    }
+    
+    // Then check sessionStorage
+    const sessionRedirect = sessionStorage.getItem('redirectAfterLogin')
+    if (sessionRedirect && sessionRedirect !== '/login') {
+      return sessionRedirect
+    }
+    
+    return '/dashboard'
+  }
+
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
-      router.push("/dashboard")
+      const redirectUrl = getRedirectUrl()
+      sessionStorage.removeItem('redirectAfterLogin')
+      router.push(redirectUrl)
     }
   }, [isAuthenticated, isLoading, router])
 
@@ -57,7 +77,10 @@ export default function LoginPage() {
       const result = await login(formData.email, formData.password) as LoginResult
       
       if (result.success) {
-        router.push("/dashboard")
+        // Get redirect URL and navigate
+        const redirectUrl = getRedirectUrl()
+        sessionStorage.removeItem('redirectAfterLogin')
+        router.push(redirectUrl)
       } else {
         // Check if this is a verification error
         if (result.error && typeof result.error === 'object') {

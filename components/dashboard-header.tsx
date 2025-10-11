@@ -90,15 +90,6 @@ export function DashboardHeader() {
               <Link href="/cases" className="text-sm font-medium hover:text-blue-600">
                 Cases
               </Link>
-              <Link href="/documents" className="text-sm font-medium hover:text-blue-600">
-                Documents
-              </Link>
-              <Link href="/team" className="text-sm font-medium hover:text-blue-600">
-                Team
-              </Link>
-              <Link href="/ai-assistant" className="text-sm font-medium hover:text-blue-600">
-                AI Assistant
-              </Link>
             </nav>
           </div>
 

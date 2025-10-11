@@ -2,6 +2,7 @@ import { jwtDecode } from 'jwt-decode'
 import { extractErrorMessage } from './api-client'
 
 export interface User {
+  id: number
   uid: string
   email: string
   first_name: string

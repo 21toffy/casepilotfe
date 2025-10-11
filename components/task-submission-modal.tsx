@@ -310,10 +310,13 @@ export function TaskSubmissionModal({ task, onSubmissionUpdate }: TaskSubmission
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
+        {
+          task.status !== 'completed' && (
         <Button variant="outline" size="sm">
           <Upload className="h-4 w-4 mr-2" />
           Submit Work
-        </Button>
+        </Button>)
+        }
       </DialogTrigger>
       
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">

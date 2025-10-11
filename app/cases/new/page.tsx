@@ -14,7 +14,7 @@ import Link from "next/link"
 import ProtectedRoute from "@/components/protected-route"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { useToast } from "@/lib/use-toast"
-import { getApiClient } from "@/lib/api-client"
+import { getApiClient, extractErrorMessage } from "@/lib/api-client"
 
 // Interface for case creation form
 interface CaseFormData {
@@ -169,13 +169,14 @@ export default function NewCasePage() {
           router.push('/cases')
         }
       } else {
-        setError(response.error || "Failed to create case")
+        setError(extractErrorMessage(response.error))
+        setIsLoading(false)
+        setIsSubmitting(false)
       }
 
     } catch (error: any) {
       console.error('Case creation error:', error)
-      setError(error.message || "An unexpected error occurred while creating the case")
-    } finally {
+      setError(extractErrorMessage(error))
       setIsLoading(false)
       setIsSubmitting(false)
     }
