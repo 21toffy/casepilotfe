@@ -31,7 +31,8 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard-header"
-import { AIAssistantChat } from "@/components/ai-assistant-chat"
+import { EnhancedAIAssistantChat } from "@/components/enhanced-ai-assistant-chat"
+import { ChatHistoryDrawer } from "@/components/chat-history-drawer"
 import { AddArtifactDialog } from "@/components/add-artifact-dialog"
 import { PDFExportDialog } from "@/components/pdf-export-dialog"
 import { CourtReportEditor } from "@/components/court-report-editor"
@@ -77,6 +78,7 @@ export default function CaseDetailPage() {
   const [convertingStep, setConvertingStep] = useState<{strategyId: number, stepIndex: number} | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([])
   const [loadingApprovals, setLoadingApprovals] = useState(false)
+  const [currentChatSessionId, setCurrentChatSessionId] = useState<number | null>(null)
 
   // Load case data on mount
   useEffect(() => {
@@ -90,6 +92,7 @@ export default function CaseDetailPage() {
       loadTasks()
       loadArtifacts()
       loadPendingApprovals()
+      loadMostRecentChatSession()
     }
   }, [params.id, hasLoaded])
 
@@ -97,6 +100,27 @@ export default function CaseDetailPage() {
   useEffect(() => {
     setHasLoaded(false)
   }, [params.id])
+
+  // Load most recent chat session on mount
+  const loadMostRecentChatSession = async () => {
+    try {
+      console.log('Loading most recent chat session for case:', params.id)
+      const response = await apiClient.getChatSessions(parseInt(params.id))
+      if (isSuccessResponse(response)) {
+        const sessions = response.data || []
+        if (sessions.length > 0) {
+          // Sessions are already ordered by last_message_at desc
+          const mostRecent = sessions[0]
+          console.log('Auto-selecting most recent session:', mostRecent.id)
+          setCurrentChatSessionId(mostRecent.id)
+        } else {
+          console.log('No existing chat sessions found')
+        }
+      }
+    } catch (error) {
+      console.error('Error loading chat sessions:', error)
+    }
+  }
 
   const loadCaseData = async () => {
     try {
@@ -1379,7 +1403,35 @@ export default function CaseDetailPage() {
           </TabsContent>
 
           <TabsContent value="ai-chat" className="space-y-6">
-            <AIAssistantChat caseId={caseData.id} />
+            <Card className="h-[600px]">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>AI Assistant</CardTitle>
+                  <CardDescription>Chat with Rhoda AI about your case</CardDescription>
+                </div>
+                <ChatHistoryDrawer 
+                  caseId={caseData.id}
+                  currentSessionId={currentChatSessionId || undefined}
+                  onSessionSelect={(session) => {
+                    setCurrentChatSessionId(session.id)
+                  }}
+                  onNewSession={() => {
+                    setCurrentChatSessionId(null)
+                  }}
+                />
+              </CardHeader>
+              <CardContent className="h-[calc(100%-80px)]">
+                {caseData && (
+                  <EnhancedAIAssistantChat
+                    caseId={caseData.id}
+                    sessionId={currentChatSessionId}
+                    onSessionChange={(sessionId) => {
+                      setCurrentChatSessionId(sessionId)
+                    }}
+                  />
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>

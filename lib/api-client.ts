@@ -240,6 +240,66 @@ class ApiClient {
   async healthCheck() {
     return this.get('/health/', { skipAuth: true })
   }
+
+  // Chat endpoints
+  async getChatSessions(caseId: number) {
+    return this.get(`/api/chat/cases/${caseId}/chat-sessions/`)
+  }
+
+  async createChatSession(caseId: number, data: { title?: string }) {
+    return this.post(`/api/chat/cases/${caseId}/chat-sessions/new/`, data)
+  }
+
+  async getChatMessages(caseId: number, sessionId: number) {
+    return this.get(`/api/chat/cases/${caseId}/chat-sessions/${sessionId}/messages/`)
+  }
+
+  async sendChatMessage(caseId: number, sessionId: number, content: string, attachmentTempIds?: string[]) {
+    return this.post(`/api/chat/cases/${caseId}/chat-sessions/${sessionId}/messages/`, {
+      content,
+      attachment_temp_ids: attachmentTempIds || []
+    })
+  }
+
+  async streamAIResponse(caseId: number, sessionId: number, onChunk?: (chunk: string) => void): Promise<string> {
+    // For now, we'll poll or implement SSE later
+    // This is a placeholder that polls for the AI response
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Get the latest message to check if AI has responded
+        const messages = await this.getChatMessages(caseId, sessionId)
+        if (isSuccessResponse(messages)) {
+          const messageList = messages.data as any[]
+          const aiMessages = messageList.filter(m => m.sender === 'ai' && m.is_complete)
+          if (aiMessages.length > 0) {
+            resolve(aiMessages[aiMessages.length - 1].content)
+          } else {
+            reject(new Error('No AI response yet'))
+          }
+        }
+      } catch (error) {
+        reject(error)
+      }
+    })
+  }
+
+  async updateChatSession(caseId: number, sessionId: number, data: { title?: string, is_active?: boolean }) {
+    return this.patch(`/api/chat/cases/${caseId}/chat-sessions/${sessionId}/`, data)
+  }
+
+  async deleteChatSession(caseId: number, sessionId: number) {
+    return this.delete(`/api/chat/cases/${caseId}/chat-sessions/${sessionId}/`)
+  }
+
+  async exportChatToPDF(caseId: number, sessionId: number) {
+    return this.get(`/api/chat/cases/${caseId}/chat-sessions/${sessionId}/pdf-export/`)
+  }
+
+  async sendFollowUpQuestion(caseId: number, sessionId: number, question: string) {
+    return this.post(`/api/chat/cases/${caseId}/chat-sessions/${sessionId}/follow-up/`, {
+      question
+    })
+  }
 }
 
 // Create singleton getter to avoid initialization issues
