@@ -36,6 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
       - name: Determine environment from branch
         id: set-env
         run: |
@@ -50,11 +55,13 @@ jobs:
           fi
           echo "Detected environment: ${{ steps.set-env.outputs.environment }}"
       
-      - uses: actions/setup-node@v4
+      - name: Cache node modules
+        uses: actions/cache@v4
         with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+          path: ${{ matrix.project }}/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('${{ matrix.project }}/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
       
       - name: Install dependencies
         run: |
