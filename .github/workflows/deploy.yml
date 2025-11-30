@@ -65,18 +65,39 @@ jobs:
       
       - name: Validate required secrets
         run: |
-          if [ "${{ steps.set-env.outputs.environment }}" == "staging" ]; then
-            if [ -z "${{ secrets.APP_URL_STAGING }}" ] || [ -z "${{ secrets.API_URL_STAGING }}" ] || [ -z "${{ secrets.HOST_DNS_STAGING }}" ] || [ -z "${{ secrets.SERVER_SSH_KEY_STAGING }}" ]; then
+          ENV="${{ steps.set-env.outputs.environment }}"
+          echo "Checking secrets for environment: $ENV"
+          
+          if [ "$ENV" == "staging" ]; then
+            MISSING_SECRETS=()
+            [ -z "${{ secrets.APP_URL_STAGING }}" ] && MISSING_SECRETS+=("APP_URL_STAGING")
+            [ -z "${{ secrets.API_URL_STAGING }}" ] && MISSING_SECRETS+=("API_URL_STAGING")
+            [ -z "${{ secrets.HOST_DNS_STAGING }}" ] && MISSING_SECRETS+=("HOST_DNS_STAGING")
+            [ -z "${{ secrets.SERVER_SSH_KEY_STAGING }}" ] && MISSING_SECRETS+=("SERVER_SSH_KEY_STAGING")
+            
+            if [ ${#MISSING_SECRETS[@]} -gt 0 ]; then
               echo "❌ ERROR: Missing required secrets for staging!"
-              echo "Required: APP_URL_STAGING, API_URL_STAGING, HOST_DNS_STAGING, SERVER_SSH_KEY_STAGING"
-              echo "See .github/SECRETS_TEMPLATE.md for configuration instructions"
+              echo "Missing: ${MISSING_SECRETS[*]}"
+              echo ""
+              echo "⚠️  IMPORTANT: Add secrets to Repository Secrets, not Environment Secrets!"
+              echo "Go to: Settings → Secrets and variables → Actions → New repository secret"
+              echo "See .github/SECRETS_TEMPLATE.md for detailed instructions"
               exit 1
             fi
           else
-            if [ -z "${{ secrets.APP_URL_PRODUCTION }}" ] || [ -z "${{ secrets.API_URL_PRODUCTION }}" ] || [ -z "${{ secrets.HOST_DNS_PRODUCTION }}" ] || [ -z "${{ secrets.SERVER_SSH_KEY_PRODUCTION }}" ]; then
+            MISSING_SECRETS=()
+            [ -z "${{ secrets.APP_URL_PRODUCTION }}" ] && MISSING_SECRETS+=("APP_URL_PRODUCTION")
+            [ -z "${{ secrets.API_URL_PRODUCTION }}" ] && MISSING_SECRETS+=("API_URL_PRODUCTION")
+            [ -z "${{ secrets.HOST_DNS_PRODUCTION }}" ] && MISSING_SECRETS+=("HOST_DNS_PRODUCTION")
+            [ -z "${{ secrets.SERVER_SSH_KEY_PRODUCTION }}" ] && MISSING_SECRETS+=("SERVER_SSH_KEY_PRODUCTION")
+            
+            if [ ${#MISSING_SECRETS[@]} -gt 0 ]; then
               echo "❌ ERROR: Missing required secrets for production!"
-              echo "Required: APP_URL_PRODUCTION, API_URL_PRODUCTION, HOST_DNS_PRODUCTION, SERVER_SSH_KEY_PRODUCTION"
-              echo "See .github/SECRETS_TEMPLATE.md for configuration instructions"
+              echo "Missing: ${MISSING_SECRETS[*]}"
+              echo ""
+              echo "⚠️  IMPORTANT: Add secrets to Repository Secrets, not Environment Secrets!"
+              echo "Go to: Settings → Secrets and variables → Actions → New repository secret"
+              echo "See .github/SECRETS_TEMPLATE.md for detailed instructions"
               exit 1
             fi
           fi
