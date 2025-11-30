@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Scale, ArrowLeft, Loader2, CheckCircle } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import { RegistrationService } from "@/lib/registration-service"
@@ -72,20 +73,20 @@ export default function RegisterPage() {
 
       // Register firm
       const result = await RegistrationService.registerFirm({ ...formData, turnstile_token: turnstileToken || undefined })
-      
+
       if (result.success) {
         // Set redirecting flag to prevent auth redirect interference
         setIsRedirecting(true)
-        
+
         // Store email for verification page FIRST
         console.log('[Register] Storing verification email:', formData.adminEmail)
         localStorage.setItem('verification_email', formData.adminEmail)
         localStorage.setItem('verification_tag', 'registration-verification')
-        
+
         // Verify they were stored
         console.log('[Register] Stored email verification:', localStorage.getItem('verification_email'))
         console.log('[Register] Stored tag verification:', localStorage.getItem('verification_tag'))
-        
+
         // Store tokens for later use after verification (but don't set as active session yet)
         if (result.tokens) {
           localStorage.setItem('pending_tokens', JSON.stringify({
@@ -95,14 +96,14 @@ export default function RegisterPage() {
           }))
           console.log('[Register] Stored pending tokens')
         }
-        
+
         // Show success toast
         toast({
           variant: "success",
           title: "Account Created Successfully!",
           description: "Please check your email for verification code. Redirecting to verification page...",
         })
-        
+
         // Redirect to verification page after 3 seconds
         setTimeout(() => {
           console.log('[Register] About to redirect to /verify-email')
@@ -130,9 +131,8 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl">
         <CardHeader className="text-center">
-          <div className="flex items-center justify-center space-x-2 mb-4">
-            <Scale className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold">LawCentrAI</span>
+          <div className="flex items-center justify-center mb-4">
+            <Image src="/logo.svg" alt="LawCentrAI Logo" width={180} height={50} />
           </div>
           <CardTitle className="text-2xl">Register Your Law Firm</CardTitle>
           <CardDescription>Set up your firm account and start managing cases with AI assistance</CardDescription>

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Scale, ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import { CloudflareTurnstile } from "@/components/cloudflare-turnstile"
@@ -51,13 +52,13 @@ export default function LoginPage() {
     if (redirectParam) {
       return decodeURIComponent(redirectParam)
     }
-    
+
     // Then check sessionStorage
     const sessionRedirect = sessionStorage.getItem('redirectAfterLogin')
     if (sessionRedirect && sessionRedirect !== '/login') {
       return sessionRedirect
     }
-    
+
     return '/dashboard'
   }
 
@@ -85,7 +86,7 @@ export default function LoginPage() {
 
     try {
       const result = await login(formData.email, formData.password, turnstileToken || undefined) as LoginResult
-      
+
       if (result.success) {
         // Get redirect URL and navigate
         const redirectUrl = getRedirectUrl()
@@ -133,9 +134,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="flex items-center justify-center space-x-2 mb-4">
-            <Scale className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold">LawCentrAI</span>
+          <div className="flex items-center justify-center mb-4">
+            <Image src="/logo.svg" alt="LawCentrAI Logo" width={180} height={50} />
           </div>
           <CardTitle className="text-2xl">Welcome Back</CardTitle>
           <CardDescription>Sign in to your LawCentrAI account</CardDescription>
@@ -147,7 +147,7 @@ export default function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input

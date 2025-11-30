@@ -92,3 +92,17 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@media (pointer: fine) {
+  body {
+    cursor: none;
+  }
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
