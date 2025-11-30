@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import { RegistrationService } from "@/lib/registration-service"
 import { useToast } from "@/lib/use-toast"
+import { CloudflareTurnstile } from "@/components/cloudflare-turnstile"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -35,6 +36,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isRedirecting, setIsRedirecting] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string>("")
 
   // Redirect if already authenticated (but not if we're in the middle of redirecting to verification)
   useEffect(() => {
@@ -60,8 +62,16 @@ export default function RegisterPage() {
         return
       }
 
+      // Only require Turnstile in production
+      const isProduction = process.env.NODE_ENV === 'production'
+      if (isProduction && !turnstileToken) {
+        setError("Please complete the security verification")
+        setIsSubmitting(false)
+        return
+      }
+
       // Register firm
-      const result = await RegistrationService.registerFirm(formData)
+      const result = await RegistrationService.registerFirm({ ...formData, turnstile_token: turnstileToken || undefined })
       
       if (result.success) {
         // Set redirecting flag to prevent auth redirect interference
@@ -122,7 +132,7 @@ export default function RegisterPage() {
         <CardHeader className="text-center">
           <div className="flex items-center justify-center space-x-2 mb-4">
             <Scale className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold">CasePilot</span>
+            <span className="text-2xl font-bold">LawCentrAI</span>
           </div>
           <CardTitle className="text-2xl">Register Your Law Firm</CardTitle>
           <CardDescription>Set up your firm account and start managing cases with AI assistance</CardDescription>
@@ -241,6 +251,19 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {process.env.NODE_ENV === 'production' && (
+              <div className="space-y-2">
+                <CloudflareTurnstile
+                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAACDu5GHln9jdUVp0"}
+                  onVerify={(token) => setTurnstileToken(token)}
+                  onError={(error) => {
+                    console.error("Turnstile error:", error)
+                    setError("Security verification failed. Please refresh the page.")
+                  }}
+                />
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-4">
               <Link href="/" className="flex-1">
                 <Button type="button" variant="outline" className="w-full bg-transparent">
@@ -248,7 +271,7 @@ export default function RegisterPage() {
                   Back to Home
                 </Button>
               </Link>
-              <Button type="submit" className="flex-1" disabled={isSubmitting}>
+              <Button type="submit" className="flex-1" disabled={isSubmitting || (process.env.NODE_ENV === 'production' && !turnstileToken)}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

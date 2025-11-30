@@ -57,6 +57,7 @@ export class RegistrationService {
     phone: string
     jurisdiction: string
     practiceAreas: string
+    turnstile_token?: string
   }): Promise<RegistrationResponse> {
     try {
       // Validate passwords match
@@ -88,7 +89,7 @@ export class RegistrationService {
       const practiceArea = formData.practiceAreas.toLowerCase()
       const industry = industryMapping[practiceArea] || 'general'
 
-      const registrationData: FirmRegistrationData = {
+      const registrationData: any = {
         name: formData.firmName,
         address: formData.firmAddress,
         phone: formData.phone,
@@ -98,6 +99,10 @@ export class RegistrationService {
         last_name: lastName,
         email: formData.adminEmail,
         password: formData.password,
+      }
+
+      if (formData.turnstile_token) {
+        registrationData.turnstile_token = formData.turnstile_token
       }
 
       // Make API call

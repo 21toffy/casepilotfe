@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: any; user?: User }>
+  login: (email: string, password: string, turnstileToken?: string) => Promise<{ success: boolean; error?: any; user?: User }>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
   updateActivity: () => void
@@ -59,10 +59,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => clearInterval(interval)
   }, [authService])
 
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (email: string, password: string, turnstileToken?: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true)
     try {
-      const result = await authService.login(email, password)
+      const result = await authService.login(email, password, turnstileToken)
       if (result.success && result.user) {
         setUser(result.user)
       }

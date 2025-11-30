@@ -286,6 +286,20 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
     }
   }
 
+  const viewFile = (file: SubmissionFile) => {
+    try {
+      // Open file URL in new tab for viewing
+      // R2 public URLs can be viewed directly in the browser
+      window.open(file.file_url, '_blank')
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "View Failed",
+        description: "Could not open the file.",
+      })
+    }
+  }
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high': return 'destructive'
@@ -617,13 +631,28 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
                                           </div>
                                         </div>
                                         
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => downloadFile(file)}
-                                        >
-                                          <Download className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex space-x-2">
+                                          {/* View button for PDFs and images */}
+                                          {(file.file_type === 'pdf' || file.file_type === 'image') && (
+                                            <Button 
+                                              variant="ghost"
+                                              size="sm" 
+                                              onClick={() => viewFile(file)}
+                                              title="View file"
+                                            >
+                                              <Eye className="h-4 w-4" />
+                                            </Button>
+                                          )}
+                                          {/* Download button */}
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => downloadFile(file)}
+                                            title="Download file"
+                                          >
+                                            <Download className="h-4 w-4" />
+                                          </Button>
+                                        </div>
                                       </div>
                                     ))}
                                   </div>
@@ -777,10 +806,23 @@ export function TaskDetailsModal({ task, trigger, onTaskUpdate }: TaskDetailsMod
                                       Text Available
                                     </Badge>
                                   )}
+                                  {/* View button for PDFs and images */}
+                                  {(file.file_type === 'pdf' || file.file_type === 'image') && (
+                                    <Button 
+                                      variant="outline"
+                                      size="sm" 
+                                      onClick={() => viewFile(file)}
+                                      title="View file"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {/* Download button */}
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => downloadFile(file)}
+                                    title="Download file"
                                   >
                                     <Download className="h-4 w-4" />
                                   </Button>

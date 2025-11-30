@@ -12,6 +12,7 @@ import { Scale, ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
+import { CloudflareTurnstile } from "@/components/cloudflare-turnstile"
 
 // Interface for authentication error responses
 interface AuthErrorResponse {
@@ -40,6 +41,7 @@ export default function LoginPage() {
   })
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string>("")
 
   // Get redirect URL from query params or sessionStorage
   const getRedirectUrl = () => {
@@ -73,8 +75,16 @@ export default function LoginPage() {
     setError("")
     setIsSubmitting(true)
 
+    // Only require Turnstile in production
+    const isProduction = process.env.NODE_ENV === 'production'
+    if (isProduction && !turnstileToken) {
+      setError("Please complete the security verification")
+      setIsSubmitting(false)
+      return
+    }
+
     try {
-      const result = await login(formData.email, formData.password) as LoginResult
+      const result = await login(formData.email, formData.password, turnstileToken || undefined) as LoginResult
       
       if (result.success) {
         // Get redirect URL and navigate
@@ -125,10 +135,10 @@ export default function LoginPage() {
         <CardHeader className="text-center">
           <div className="flex items-center justify-center space-x-2 mb-4">
             <Scale className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold">CasePilot</span>
+            <span className="text-2xl font-bold">LawCentrAI</span>
           </div>
           <CardTitle className="text-2xl">Welcome Back</CardTitle>
-          <CardDescription>Sign in to your CasePilot account</CardDescription>
+          <CardDescription>Sign in to your LawCentrAI account</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -161,8 +171,20 @@ export default function LoginPage() {
                 disabled={isSubmitting}
               />
             </div>
+            {process.env.NODE_ENV === 'production' && (
+              <div className="space-y-2">
+                <CloudflareTurnstile
+                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAACDu5GHln9jdUVp0"}
+                  onVerify={(token) => setTurnstileToken(token)}
+                  onError={(error) => {
+                    console.error("Turnstile error:", error)
+                    setError("Security verification failed. Please refresh the page.")
+                  }}
+                />
+              </div>
+            )}
             <div className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
+              <Button type="submit" className="w-full" disabled={isSubmitting || (process.env.NODE_ENV === 'production' && !turnstileToken)}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

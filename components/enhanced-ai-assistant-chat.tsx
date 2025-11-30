@@ -417,83 +417,95 @@ export function EnhancedAIAssistantChat({
                           
                           try {
                             setLoading(true)
+                            toast({
+                              title: 'Generating PDF',
+                              description: 'Please wait while we prepare your document...',
+                            })
+                            
+                            // Fetch markdown content from backend
                             const response = await getApiClient().exportChatToPDF(caseId, currentSessionId)
                             
                             if (isSuccessResponse(response)) {
                               const { pdf_content } = response.data
                               
-                              console.log('📄 Generated PDF content:', pdf_content)
+                              console.log('📄 Received markdown content from backend')
                               
-                              // Create a new window with the markdown content and trigger print
-                              const printWindow = window.open('', '_blank', 'width=800,height=600')
-                              if (printWindow) {
-                                printWindow.document.open()
-                                printWindow.document.write(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Chat Export - PDF</title>
-    <style>
-        @media print {
-            body { 
-                margin: 0;
-                padding: 15px;
-            }
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.8;
-            max-width: 800px;
-            margin: 40px auto;
-            padding: 40px;
-            color: #2c3e50;
-            background: white;
-        }
-        h1 { font-size: 2em; color: #1a1a1a; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { font-size: 1.5em; color: #2c3e50; margin-top: 30px; }
-        h3 { font-size: 1.2em; color: #34495e; margin-top: 20px; }
-        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
-        pre { background: #f8f8f8; padding: 15px; border-radius: 5px; overflow-x: auto; border-left: 4px solid #3498db; }
-        blockquote { border-left: 4px solid #3498db; padding-left: 20px; margin-left: 0; color: #555; }
-        strong { font-weight: 600; color: #1a1a1a; }
-        ul, ol { padding-left: 30px; }
-        p { margin: 15px 0; }
-    </style>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown.min.css">
-</head>
-<body class="markdown-body">
-${pdf_content}
-</body>
-</html>
-`)
-                                printWindow.document.close()
-                                
-                                // Wait for content to load then print
-                                printWindow.onload = () => {
-                                  setTimeout(() => {
-                                    printWindow.print()
-                                    toast({
-                                      title: 'PDF Ready',
-                                      description: 'Use "Save as PDF" in the print dialog',
-                                    })
-                                    setLoading(false)
-                                  }, 1000)
-                                }
-                              } else {
-                                setLoading(false)
-                                toast({
-                                  title: 'Error',
-                                  description: 'Unable to open print window. Please allow popups.',
-                                  variant: 'destructive',
-                                })
+                              // Import libraries dynamically
+                              const { marked } = await import('marked')
+                              const html2pdf = (await import('html2pdf.js')).default
+                              
+                              // Convert markdown to HTML
+                              const htmlContent = marked(pdf_content)
+                              
+                              // Create a temporary element with the HTML content
+                              const element = document.createElement('div')
+                              element.innerHTML = htmlContent
+                              
+                              // Apply styling to the element
+                              element.style.padding = '40px'
+                              element.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                              element.style.lineHeight = '1.6'
+                              element.style.color = '#2c3e50'
+                              element.style.fontSize = '14px'
+                              
+                              // Add CSS for better formatting
+                              const style = document.createElement('style')
+                              style.textContent = `
+                                h1 { font-size: 24px; color: #1a1a1a; border-bottom: 3px solid #3498db; padding-bottom: 10px; margin-top: 20px; margin-bottom: 15px; }
+                                h2 { font-size: 20px; color: #2c3e50; margin-top: 25px; margin-bottom: 12px; }
+                                h3 { font-size: 18px; color: #34495e; margin-top: 20px; margin-bottom: 10px; }
+                                h4 { font-size: 16px; color: #34495e; margin-top: 15px; margin-bottom: 8px; }
+                                p { margin: 12px 0; }
+                                code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 13px; }
+                                pre { background: #f8f8f8; padding: 15px; border-radius: 5px; overflow-x: auto; border-left: 4px solid #3498db; margin: 15px 0; }
+                                pre code { background: transparent; padding: 0; }
+                                blockquote { border-left: 4px solid #3498db; padding-left: 20px; margin: 15px 0; color: #555; font-style: italic; }
+                                strong { font-weight: 600; color: #1a1a1a; }
+                                em { font-style: italic; }
+                                ul, ol { padding-left: 30px; margin: 12px 0; }
+                                li { margin: 6px 0; }
+                                table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+                                th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+                                th { background-color: #f8f8f8; font-weight: 600; }
+                                a { color: #3498db; text-decoration: none; }
+                                hr { border: none; border-top: 2px solid #e0e0e0; margin: 20px 0; }
+                              `
+                              element.appendChild(style)
+                              
+                              // Configure PDF options
+                              const opt = {
+                                margin: [15, 15, 15, 15],
+                                filename: `chat-export-${new Date().toISOString().slice(0, 10)}.pdf`,
+                                image: { type: 'jpeg', quality: 0.98 },
+                                html2canvas: { 
+                                  scale: 2,
+                                  useCORS: true,
+                                  letterRendering: true,
+                                  logging: false
+                                },
+                                jsPDF: { 
+                                  unit: 'mm', 
+                                  format: 'a4', 
+                                  orientation: 'portrait',
+                                  compress: true
+                                },
+                                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
                               }
+                              
+                              // Generate and download PDF
+                              await html2pdf().set(opt).from(element).save()
+                              
+                              toast({
+                                title: 'PDF Downloaded',
+                                description: `Your chat has been exported successfully`,
+                              })
+                              setLoading(false)
                             }
                           } catch (error) {
                             console.error('Error exporting PDF:', error)
                             toast({
                               title: 'Error',
-                              description: 'Failed to export PDF',
+                              description: 'Failed to export PDF. Please try again.',
                               variant: 'destructive',
                             })
                             setLoading(false)

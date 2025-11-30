@@ -270,8 +270,9 @@ export default function CaseDetailPage() {
       
       const response = await apiClient.post(`/api/tasks/case/${params.id}/create/`, taskData)
       
-      if (response.data) {
-        // Mark step as converted
+      // Check if task was created successfully (response.data should contain task data)
+      if (response.data && (response.data.id || response.data.uid)) {
+        // Mark step as converted to prevent duplicate conversions
         setConvertedSteps(prev => new Set([...prev, stepKey]))
         
         toast({
@@ -279,8 +280,13 @@ export default function CaseDetailPage() {
           description: `Step ${step.step || stepIndex + 1} has been converted to a task.`,
         })
         
-        // Reload tasks
+        // Reload tasks to show the new task
         loadTasks()
+        
+        // Reload strategies to update implementation timeline status
+        loadStrategies()
+      } else {
+        throw new Error("Task creation response was invalid")
       }
     } catch (error: any) {
       console.error('Failed to convert step to task:', error)
@@ -1376,19 +1382,39 @@ export default function CaseDetailPage() {
                         <div className="space-y-1">
                           <div className="flex items-center space-x-2">
                             <h4 className="font-medium">{artifact.title}</h4>
-                            <Badge variant="outline">{artifact.type}</Badge>
+                            <Badge variant="outline">{artifact.document_type || 'Document'}</Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">{artifact.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Added by {artifact.addedBy} on {artifact.dateAdded}
-                          </p>
+                          <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+                            <span>Added by {artifact.uploaded_by_name}</span>
+                            <span>{new Date(artifact.created_at).toLocaleDateString()}</span>
+                            <span>{(artifact.file_size / 1024 / 1024).toFixed(2)} MB</span>
+                          </div>
                         </div>
                         <div className="flex flex-col items-end space-y-2">
                           <Badge variant={getStatusColor(artifact.status)}>{artifact.status}</Badge>
-                          <Button size="sm" variant="ghost">
-                            <Download className="h-4 w-4 mr-2" />
-                            Download
-                          </Button>
+                          <div className="flex space-x-2">
+                            {/* View button for PDFs and images */}
+                            {(artifact.file_type?.includes('pdf') || artifact.file_type?.startsWith('image/')) && (
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => window.open(artifact.view_url, '_blank')}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View
+                              </Button>
+                            )}
+                            {/* Download button */}
+                            <Button 
+                              size="sm" 
+                              variant="ghost"
+                              onClick={() => window.open(artifact.download_url, '_blank')}
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Download
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>

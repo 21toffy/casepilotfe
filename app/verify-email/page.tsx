@@ -11,6 +11,7 @@ import { Loader2, Mail, ArrowLeft, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/lib/use-toast"
 import { getApiClient } from "@/lib/api-client"
+import { CloudflareTurnstile } from "@/components/cloudflare-turnstile"
 
 export default function VerifyEmailPage() {
   const router = useRouter()
@@ -23,6 +24,7 @@ export default function VerifyEmailPage() {
   const [isResending, setIsResending] = useState(false)
   const [timeLeft, setTimeLeft] = useState(180) // 3 minutes
   const [canResend, setCanResend] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string>("")
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => {
@@ -101,6 +103,13 @@ export default function VerifyEmailPage() {
       return
     }
 
+    // Only require Turnstile in production
+    const isProduction = process.env.NODE_ENV === 'production'
+    if (isProduction && !turnstileToken) {
+      setError("Please complete the security verification")
+      return
+    }
+
     setError("")
     setIsVerifying(true)
 
@@ -109,7 +118,8 @@ export default function VerifyEmailPage() {
       const response = await apiClient.post('/api/verification/otp/verify/', {
         email,
         otp: otpToVerify,
-        tag
+        tag,
+        turnstile_token: turnstileToken || undefined
       })
 
       if (response.error) {
@@ -129,7 +139,7 @@ export default function VerifyEmailPage() {
       if (pendingTokens) {
         const tokenData = JSON.parse(pendingTokens)
         localStorage.setItem(
-          process.env.NEXT_PUBLIC_SESSION_STORAGE_KEY || 'casepilot_session',
+          process.env.NEXT_PUBLIC_SESSION_STORAGE_KEY || 'lawcentrai_session',
           JSON.stringify(tokenData)
         )
         localStorage.removeItem('pending_tokens')
@@ -298,9 +308,22 @@ export default function VerifyEmailPage() {
             </div>
           </div>
 
+          {process.env.NODE_ENV === 'production' && (
+            <div className="space-y-2">
+              <CloudflareTurnstile
+                siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAACDu5GHln9jdUVp0"}
+                onVerify={(token) => setTurnstileToken(token)}
+                onError={(error) => {
+                  console.error("Turnstile error:", error)
+                  setError("Security verification failed. Please refresh the page.")
+                }}
+              />
+            </div>
+          )}
+
           <Button
             onClick={() => handleVerify()}
-            disabled={isVerifying || otp.some(digit => !digit)}
+            disabled={isVerifying || otp.some(digit => !digit) || (process.env.NODE_ENV === 'production' && !turnstileToken)}
             className="w-full"
           >
             {isVerifying ? (

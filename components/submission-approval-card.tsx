@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { ThumbsUp, ThumbsDown, Trash2, FileText, Download, User, Calendar, MessageSquare } from "lucide-react"
+import { ThumbsUp, ThumbsDown, Trash2, FileText, Download, User, Calendar, MessageSquare, Eye, ChevronDown, ChevronUp } from "lucide-react"
 import { useToast } from "@/lib/use-toast"
 import { CommentsSection } from "@/components/comments-section"
 
@@ -34,6 +34,8 @@ export function SubmissionApprovalCard({
   const [rejectionReason, setRejectionReason] = useState("")
   const [rejectionComments, setRejectionComments] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showFullContent, setShowFullContent] = useState(false)
+  const [showFiles, setShowFiles] = useState(false)
 
   const isSubmitter = submission.submitted_by?.id === currentUserId
   const isTaskCreator = submission.task?.created_by?.id === currentUserId
@@ -153,18 +155,90 @@ export function SubmissionApprovalCard({
 
             {/* Files */}
             {submission.files && submission.files.length > 0 && (
-              <div className="flex items-center space-x-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  {submission.files.length} file(s) attached
-                </span>
+              <div className="space-y-2">
+                <button
+                  onClick={() => setShowFiles(!showFiles)}
+                  className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>{submission.files.length} file(s) attached</span>
+                  {showFiles ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+                
+                {showFiles && (
+                  <div className="space-y-2 pl-6 border-l-2">
+                    {submission.files.map((file: any) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center justify-between p-2 border rounded-md bg-muted/30"
+                      >
+                        <div className="flex items-center space-x-2 flex-1 min-w-0">
+                          <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{file.original_filename}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {file.file_size_human || `${(file.file_size / 1024).toFixed(1)} KB`} • {file.content_type}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2 flex-shrink-0">
+                          {/* View button for PDFs and images */}
+                          {(file.file_type === 'pdf' || file.file_type === 'image') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => window.open(file.file_url, '_blank')}
+                              title="View file"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {/* Download button */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(file.file_url, '_blank')}
+                            title="Download file"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Content Preview */}
             {submission.content && (
-              <div className="bg-muted/50 rounded-md p-3">
-                <p className="text-sm line-clamp-3">{submission.content}</p>
+              <div className="bg-muted/50 rounded-md p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Submission Content:</p>
+                  {submission.content.length > 200 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowFullContent(!showFullContent)}
+                      className="h-6 text-xs"
+                    >
+                      {showFullContent ? (
+                        <>
+                          <ChevronUp className="h-3 w-3 mr-1" />
+                          Show Less
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3 w-3 mr-1" />
+                          Show More
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                <p className={`text-sm whitespace-pre-wrap ${showFullContent ? '' : 'line-clamp-3'}`}>
+                  {submission.content}
+                </p>
               </div>
             )}
 

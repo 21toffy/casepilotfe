@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -28,13 +28,23 @@ import {
   X,
   Clock,
   Copy,
-  Link as LinkIcon
+  Link as LinkIcon,
+  CreditCard,
+  Crown,
+  FolderOpen,
+  MessageSquare,
+  Calendar,
+  Loader2,
+  AlertTriangle
 } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import ProtectedRoute from "@/components/protected-route"
 import { useAuth } from "@/contexts/auth-context"
+import { useBilling } from "@/contexts/billing-context"
 import { getApiClient } from "@/lib/api-client"
 import { useToast } from "@/lib/use-toast"
+import { Progress } from "@/components/ui/progress"
+import { useSearchParams } from "next/navigation"
 
 interface ProfileFormData {
   first_name: string
@@ -101,9 +111,18 @@ interface StaffMember {
   last_active?: string
 }
 
-export default function SettingsPage() {
+function SettingsContent() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const searchParams = useSearchParams()
+  const { 
+    subscriptionStatus, 
+    availablePlans, 
+    isLoading: isBillingLoading, 
+    error: billingError, 
+    initiatePayment,
+    refreshStatus 
+  } = useBilling()
   const [activeTab, setActiveTab] = useState("profile")
   const [isLoading, setIsLoading] = useState(false)
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
@@ -115,6 +134,7 @@ export default function SettingsPage() {
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false)
   const [invitations, setInvitations] = useState<any[]>([])
   const [isLoadingInvitations, setIsLoadingInvitations] = useState(false)
+  const [processingPayment, setProcessingPayment] = useState<string | null>(null)
   
   // Profile form data
   const [profileData, setProfileData] = useState<ProfileFormData>({
@@ -149,6 +169,14 @@ export default function SettingsPage() {
       loadInvitations()
     }
   }, [user])
+
+  useEffect(() => {
+    // Handle tab query parameter
+    const tab = searchParams.get('tab')
+    if (tab && ['profile', 'billing', 'organization', 'metrics'].includes(tab)) {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
 
   const loadUserProfile = async () => {
     try {
@@ -411,6 +439,55 @@ export default function SettingsPage() {
     })
   }
 
+  const handleUpgrade = async (planCode: string) => {
+    if (user?.role !== 'super_user') {
+      toast({
+        variant: "destructive",
+        title: "Permission Denied",
+        description: "Only firm administrators can manage subscriptions.",
+      })
+      return
+    }
+
+    setProcessingPayment(planCode)
+
+    try {
+      // Use the proper API client for authenticated requests
+      const { getApiClient } = await import('@/lib/api-client')
+      const apiClient = getApiClient()
+      
+      const response = await apiClient.post('/api/billing/payment/initiate/', {
+        plan_code: planCode,
+        callback_url: `${window.location.origin}/billing/payment-success?redirect=settings`,
+      })
+
+      if (response.error) {
+        throw new Error(response.error.error || response.error.message || 'Request failed')
+      }
+
+      const result = response.data
+      
+      if (result.authorization_url) {
+        // Redirect to Paystack payment page
+        window.location.href = result.authorization_url
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Payment Failed",
+          description: "Failed to get payment authorization URL",
+        })
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "An unexpected error occurred",
+      })
+    } finally {
+      setProcessingPayment(null)
+    }
+  }
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
@@ -429,10 +506,14 @@ export default function SettingsPage() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className={`grid w-full ${user?.role === 'super_user' ? 'grid-cols-3' : 'grid-cols-1'}`}>
+            <TabsList className={`grid w-full ${user?.role === 'super_user' ? 'grid-cols-4' : 'grid-cols-2'}`}>
               <TabsTrigger value="profile" className="flex items-center space-x-2">
                 <User className="h-4 w-4" />
                 <span>Profile Settings</span>
+              </TabsTrigger>
+              <TabsTrigger value="billing" className="flex items-center space-x-2">
+                <CreditCard className="h-4 w-4" />
+                <span>Billing & Subscription</span>
               </TabsTrigger>
               {user?.role === 'super_user' && (
                 <>
@@ -586,6 +667,427 @@ export default function SettingsPage() {
                       <Save className="h-4 w-4 mr-2" />
                       {isLoading ? 'Saving...' : 'Save Changes'}
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Billing & Subscription Tab */}
+            <TabsContent value="billing" className="space-y-6">
+              {billingError && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{billingError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Current Subscription Status */}
+              {subscriptionStatus && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          {subscriptionStatus.plan_code === 'professional' && (
+                            <Crown className="h-5 w-5 text-yellow-500" />
+                          )}
+                          Current Plan: {subscriptionStatus.plan_name}
+                        </CardTitle>
+                        <CardDescription>
+                          Status: <Badge variant={subscriptionStatus.is_active ? "default" : "destructive"}>
+                            {subscriptionStatus.status}
+                          </Badge>
+                        </CardDescription>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        onClick={refreshStatus}
+                        disabled={isBillingLoading}
+                      >
+                        {isBillingLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          'Refresh Status'
+                        )}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* Cases Usage */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <FolderOpen className="h-4 w-4" />
+                          <span className="font-medium">Cases</span>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {subscriptionStatus.current_counts.total_cases} / {subscriptionStatus.limits.max_cases === -1 ? 'Unlimited' : subscriptionStatus.limits.max_cases}
+                        </div>
+                        {subscriptionStatus.limits.max_cases !== -1 && (
+                          <Progress 
+                            value={Math.min((subscriptionStatus.current_counts.total_cases / subscriptionStatus.limits.max_cases) * 100, 100)} 
+                            className="h-2"
+                          />
+                        )}
+                      </div>
+
+                      {/* Users Usage */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4" />
+                          <span className="font-medium">Team Members</span>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {subscriptionStatus.current_counts.total_users} / {subscriptionStatus.limits.max_users === -1 ? 'Unlimited' : subscriptionStatus.limits.max_users}
+                        </div>
+                        {subscriptionStatus.limits.max_users !== -1 && (
+                          <Progress 
+                            value={Math.min((subscriptionStatus.current_counts.total_users / subscriptionStatus.limits.max_users) * 100, 100)} 
+                            className="h-2"
+                          />
+                        )}
+                      </div>
+
+                      {/* Chat Usage */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          <span className="font-medium">Daily Chats</span>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {subscriptionStatus.usage_today.chat_messages_sent} / {subscriptionStatus.limits.daily_chat_limit === -1 ? 'Unlimited' : subscriptionStatus.limits.daily_chat_limit} today
+                        </div>
+                        {subscriptionStatus.limits.daily_chat_limit !== -1 && (
+                          <Progress 
+                            value={Math.min((subscriptionStatus.usage_today.chat_messages_sent / subscriptionStatus.limits.daily_chat_limit) * 100, 100)} 
+                            className="h-2"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {subscriptionStatus.expires_at && (
+                      <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium text-blue-900">
+                            {subscriptionStatus.days_until_expiry !== null && subscriptionStatus.days_until_expiry > 0
+                              ? `Expires in ${subscriptionStatus.days_until_expiry} days`
+                              : 'Subscription expired'
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Available Plans */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Subscription Plans</CardTitle>
+                  <CardDescription>
+                    Choose the plan that best fits your needs
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {availablePlans.map((plan) => (
+                      <Card 
+                        key={plan.id} 
+                        className={`relative ${
+                          subscriptionStatus?.plan_code === plan.plan_code 
+                            ? 'ring-2 ring-blue-500 bg-blue-50' 
+                            : ''
+                        }`}
+                      >
+                        {subscriptionStatus?.plan_code === plan.plan_code && (
+                          <Badge className="absolute -top-2 -right-2">Current Plan</Badge>
+                        )}
+                        
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="flex items-center gap-2">
+                              {plan.plan_code === 'professional' && (
+                                <Crown className="h-5 w-5 text-yellow-500" />
+                              )}
+                              {plan.name}
+                            </CardTitle>
+                            <div className="text-right">
+                              <div className="text-2xl font-bold">
+                                ₦{plan.price.toLocaleString()}
+                              </div>
+                              <div className="text-sm text-gray-600">/{plan.billing_cycle}</div>
+                            </div>
+                          </div>
+                          <CardDescription>{plan.description}</CardDescription>
+                        </CardHeader>
+                        
+                        <CardContent>
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              {plan.max_cases === -1 ? (
+                                <Check className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <span className="text-sm font-medium w-4">{plan.max_cases}</span>
+                              )}
+                              <span className="text-sm">
+                                {plan.max_cases === -1 ? 'Unlimited cases' : `${plan.max_cases} case${plan.max_cases === 1 ? '' : 's'}`}
+                              </span>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              {plan.can_invite_users ? (
+                                <Check className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <X className="h-4 w-4 text-red-500" />
+                              )}
+                              <span className="text-sm">
+                                {plan.can_invite_users ? 'Team collaboration' : 'No team collaboration'}
+                              </span>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              {plan.daily_chat_limit === -1 ? (
+                                <Check className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <span className="text-sm font-medium w-4">{plan.daily_chat_limit}</span>
+                              )}
+                              <span className="text-sm">
+                                {plan.daily_chat_limit === -1 
+                                  ? 'Unlimited AI chats' 
+                                  : `${plan.daily_chat_limit} AI chats per day`
+                                }
+                              </span>
+                            </div>
+                          </div>
+
+                          {subscriptionStatus?.plan_code !== plan.plan_code && (
+                            <Button 
+                              className="w-full mt-6" 
+                              onClick={() => handleUpgrade(plan.plan_code)}
+                              disabled={processingPayment === plan.plan_code || (user?.role !== 'super_user')}
+                            >
+                              {processingPayment === plan.plan_code ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <CreditCard className="h-4 w-4 mr-2" />
+                                  {plan.price === 0 ? 'Downgrade' : 'Upgrade'}
+                                </>
+                              )}
+                            </Button>
+                          )}
+
+                          {user?.role !== 'super_user' && (
+                            <p className="text-xs text-gray-500 mt-2 text-center">
+                              Only firm administrators can manage subscriptions
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Usage Analytics */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Usage Analytics</CardTitle>
+                  <CardDescription>
+                    Detailed breakdown of your current usage
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {subscriptionStatus && (
+                    <div className="space-y-6">
+                      {/* Today's Usage */}
+                      <div>
+                        <h4 className="font-medium mb-3">Today's Activity</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="p-4 bg-blue-50 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <FolderOpen className="h-4 w-4 text-blue-600" />
+                              <span className="font-medium text-blue-900">Cases Created</span>
+                            </div>
+                            <div className="text-2xl font-bold text-blue-900">
+                              {subscriptionStatus.usage_today.cases_created}
+                            </div>
+                          </div>
+                          
+                          <div className="p-4 bg-green-50 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <MessageSquare className="h-4 w-4 text-green-600" />
+                              <span className="font-medium text-green-900">Chat Messages</span>
+                            </div>
+                            <div className="text-2xl font-bold text-green-900">
+                              {subscriptionStatus.usage_today.chat_messages_sent}
+                            </div>
+                            <div className="text-xs text-green-700">
+                              Limit: {subscriptionStatus.limits.daily_chat_limit === -1 ? 'Unlimited' : subscriptionStatus.limits.daily_chat_limit}
+                            </div>
+                          </div>
+                          
+                          <div className="p-4 bg-purple-50 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <UserPlus className="h-4 w-4 text-purple-600" />
+                              <span className="font-medium text-purple-900">Users Invited</span>
+                            </div>
+                            <div className="text-2xl font-bold text-purple-900">
+                              {subscriptionStatus.usage_today.users_invited}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Overall Usage */}
+                      <div>
+                        <h4 className="font-medium mb-3">Overall Usage</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="p-4 border rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium">Total Cases</span>
+                              <Badge variant="outline">
+                                {subscriptionStatus.current_counts.total_cases} / {subscriptionStatus.limits.max_cases === -1 ? '∞' : subscriptionStatus.limits.max_cases}
+                              </Badge>
+                            </div>
+                            {subscriptionStatus.limits.max_cases !== -1 && (
+                              <Progress 
+                                value={Math.min((subscriptionStatus.current_counts.total_cases / subscriptionStatus.limits.max_cases) * 100, 100)} 
+                                className="h-2"
+                              />
+                            )}
+                          </div>
+                          
+                          <div className="p-4 border rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium">Team Members</span>
+                              <Badge variant="outline">
+                                {subscriptionStatus.current_counts.total_users} / {subscriptionStatus.limits.max_users === -1 ? '∞' : subscriptionStatus.limits.max_users}
+                              </Badge>
+                            </div>
+                            {subscriptionStatus.limits.max_users !== -1 && (
+                              <Progress 
+                                value={Math.min((subscriptionStatus.current_counts.total_users / subscriptionStatus.limits.max_users) * 100, 100)} 
+                                className="h-2"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Plan Features */}
+                      <div>
+                        <h4 className="font-medium mb-3">Plan Features</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="flex items-center gap-2">
+                            {subscriptionStatus.limits.can_invite_users ? (
+                              <Check className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <X className="h-4 w-4 text-red-500" />
+                            )}
+                            <span className="text-sm">Team Collaboration</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-500" />
+                            <span className="text-sm">AI-Powered Case Analysis</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-500" />
+                            <span className="text-sm">Document Management</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-500" />
+                            <span className="text-sm">Case Timeline Tracking</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Billing Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Billing Information</CardTitle>
+                  <CardDescription>
+                    Manage your billing details and view payment history
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {subscriptionStatus && (
+                      <>
+                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                          <div>
+                            <div className="font-medium">Current Plan</div>
+                            <div className="text-sm text-gray-600">{subscriptionStatus.plan_name}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-medium">
+                              {subscriptionStatus.plan_code === 'free' ? 'Free' : '₦15,000'}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {subscriptionStatus.plan_code === 'free' ? 'Forever' : 'per month'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {subscriptionStatus.expires_at && (
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div>
+                              <div className="font-medium">Next Billing Date</div>
+                              <div className="text-sm text-gray-600">
+                                {new Date(subscriptionStatus.expires_at).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}
+                              </div>
+                            </div>
+                            <Badge variant={subscriptionStatus.days_until_expiry && subscriptionStatus.days_until_expiry < 7 ? "destructive" : "default"}>
+                              {subscriptionStatus.days_until_expiry !== null && subscriptionStatus.days_until_expiry > 0
+                                ? `${subscriptionStatus.days_until_expiry} days remaining`
+                                : 'Expired'
+                              }
+                            </Badge>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <div className="pt-4 border-t">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">Payment History</div>
+                          <div className="text-sm text-gray-600">View your payment records</div>
+                        </div>
+                        <Button variant="outline" size="sm">
+                          View History
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">Download Invoices</div>
+                          <div className="text-sm text-gray-600">Get receipts for your payments</div>
+                        </div>
+                        <Button variant="outline" size="sm">
+                          Download
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1141,5 +1643,17 @@ export default function SettingsPage() {
         </main>
       </div>
     </ProtectedRoute>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <SettingsContent />
+    </Suspense>
   )
 }

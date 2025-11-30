@@ -80,7 +80,7 @@ export function DashboardHeader() {
           <div className="flex items-center space-x-8">
             <Link href="/dashboard" className="flex items-center space-x-2">
               <Scale className="h-8 w-8 text-blue-600" />
-              <span className="text-2xl font-bold text-gray-900">CasePilot</span>
+              <span className="text-2xl font-bold text-gray-900">LawCentrAI</span>
             </Link>
 
             <nav className="hidden md:flex items-center space-x-6">
