@@ -40,7 +40,9 @@ export default function AcceptInvitationPage() {
   })
 
   useEffect(() => {
-    loadInvitation()
+    if (params.token) {
+      loadInvitation()
+    }
   }, [params.token])
 
   const loadInvitation = async () => {
@@ -48,13 +50,21 @@ export default function AcceptInvitationPage() {
       setIsLoading(true)
       setError(null)
       
+      // Handle optional catch-all - token is array or undefined
+      const token = Array.isArray(params.token) ? params.token[0] : params.token
+      if (!token) {
+        setError("Invalid invitation link")
+        setIsLoading(false)
+        return
+      }
+      
       const apiClient = getApiClient()
       // Try case invitation first, then org invitation
-      let response = await apiClient.get(`/api/users/invitations/case-invite/${params.token}/`)
+      let response = await apiClient.get(`/api/users/invitations/case-invite/${token}/`)
       
       if (!response.data && response.error) {
         // Try org invitation
-        response = await apiClient.get(`/api/users/invitations/${params.token}/`)
+        response = await apiClient.get(`/api/users/invitations/${token}/`)
       }
       
       if (response.data && response.data.invitation) {
@@ -77,11 +87,22 @@ export default function AcceptInvitationPage() {
     try {
       const apiClient = getApiClient()
       
+      // Handle optional catch-all - token is array or undefined
+      const token = Array.isArray(params.token) ? params.token[0] : params.token
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Invalid invitation link.",
+        })
+        return
+      }
+      
       // Determine if it's a case or org invitation
       const isCaseInvitation = invitation?.case_id !== undefined
       const endpoint = isCaseInvitation
-        ? `/api/users/invitations/case-invite/${params.token}/accept/`
-        : `/api/users/invitations/${params.token}/accept/`
+        ? `/api/users/invitations/case-invite/${token}/accept/`
+        : `/api/users/invitations/${token}/accept/`
       
       const response = await apiClient.post(endpoint, {})
       

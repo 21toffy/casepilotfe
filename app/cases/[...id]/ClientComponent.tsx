@@ -80,9 +80,12 @@ export default function CaseDetailPage() {
   const [loadingApprovals, setLoadingApprovals] = useState(false)
   const [currentChatSessionId, setCurrentChatSessionId] = useState<number | null>(null)
 
+  // Handle optional catch-all - id is array or undefined
+  const caseId = Array.isArray(params.id) ? params.id[0] : params.id
+
   // Load case data on mount
   useEffect(() => {
-    if (params.id && !hasLoaded) {
+    if (caseId && !hasLoaded) {
       setHasLoaded(true)
       loadCaseData()
       loadHearings()
@@ -94,19 +97,19 @@ export default function CaseDetailPage() {
       loadPendingApprovals()
       loadMostRecentChatSession()
     }
-  }, [params.id, hasLoaded])
+  }, [caseId, hasLoaded])
 
   // Reset hasLoaded when case ID changes
   useEffect(() => {
     setHasLoaded(false)
-  }, [params.id])
+  }, [caseId])
 
   // Load most recent chat session on mount
   const loadMostRecentChatSession = async () => {
     try {
-      console.log('Loading most recent chat session for case:', params.id)
+      console.log('Loading most recent chat session for case:', caseId)
       const apiClient = getApiClient()
-      const response = await apiClient.getChatSessions(parseInt(params.id))
+      const response = await apiClient.getChatSessions(parseInt(caseId))
       if (isSuccessResponse(response)) {
         const sessions = response.data || []
         if (sessions.length > 0) {
@@ -129,7 +132,7 @@ export default function CaseDetailPage() {
       setError(null)
       
       const apiClient = getApiClient()
-      const response = await apiClient.get(`/api/cases/${params.id}/`)
+      const response = await apiClient.get(`/api/cases/${caseId}/`)
       
       if (response.data) {
         setCaseData(response.data)
@@ -153,7 +156,7 @@ export default function CaseDetailPage() {
   const loadHearings = async () => {
     try {
       const apiClient = getApiClient()
-      const response = await apiClient.get(`/api/cases/${params.id}/hearings/`)
+      const response = await apiClient.get(`/api/cases/${caseId}/hearings/`)
       
       if (response.data) {
         setHearings(response.data)
@@ -167,7 +170,7 @@ export default function CaseDetailPage() {
   const loadFacts = async () => {
     try {
       const apiClient = getApiClient()
-      const response = await apiClient.get(`/api/cases/${params.id}/facts/`)
+      const response = await apiClient.get(`/api/cases/${caseId}/facts/`)
       
       if (response.data) {
         setFacts(response.data)
@@ -181,7 +184,7 @@ export default function CaseDetailPage() {
   const loadDesiredOutcomes = async () => {
     try {
       const apiClient = getApiClient()
-      const response = await apiClient.get(`/api/cases/${params.id}/desired-outcomes/`)
+      const response = await apiClient.get(`/api/cases/${caseId}/desired-outcomes/`)
       
       if (response.data) {
         setDesiredOutcomes(response.data)
@@ -196,7 +199,7 @@ export default function CaseDetailPage() {
     try {
       setLoadingStrategies(true)
       const apiClient = getApiClient()
-      const response = await apiClient.get(`/api/strategies/case/${params.id}/`)
+      const response = await apiClient.get(`/api/strategies/case/${caseId}/`)
       
       let strategiesData = []
       if (response.data && response.data.results) {
@@ -229,7 +232,7 @@ export default function CaseDetailPage() {
   const loadTasks = async () => {
     try {
       const apiClient = getApiClient()
-      const response = await apiClient.get(`/api/tasks/case/${params.id}/`)
+      const response = await apiClient.get(`/api/tasks/case/${caseId}/`)
       if (response.data && response.data.results) {
         console.log(response.data.results, "lllllll")
         setMyTasks(response.data.results)
@@ -269,7 +272,7 @@ export default function CaseDetailPage() {
         notes: `Converted from strategy: ${strategy.title}\nTimeline: ${step.timeline || 'Not specified'}\nResponsible: ${step.responsible || 'Not specified'}`
       }
       
-      const response = await apiClient.post(`/api/tasks/case/${params.id}/create/`, taskData)
+      const response = await apiClient.post(`/api/tasks/case/${caseId}/create/`, taskData)
       
       // Check if task was created successfully (response.data should contain task data)
       if (response.data && (response.data.id || response.data.uid)) {
@@ -304,7 +307,7 @@ export default function CaseDetailPage() {
   const loadArtifacts = async () => {
     try {
       const apiClient = getApiClient()
-      const response = await apiClient.get(`/api/documents/case/${params.id}/`)
+      const response = await apiClient.get(`/api/documents/case/${caseId}/`)
       if (response.data && response.data.results) {
         setArtifacts(response.data.results)
       } else if (response.data) {
@@ -319,7 +322,7 @@ export default function CaseDetailPage() {
     try {
       setLoadingApprovals(true)
       const apiClient = getApiClient()
-      const response = await apiClient.get(`/api/tasks/approvals/pending/?case_id=${params.id}`)
+      const response = await apiClient.get(`/api/tasks/approvals/pending/?case_id=${caseId}`)
       if (response.data && response.data.submissions) {
         setPendingApprovals(response.data.submissions)
       }
@@ -521,7 +524,7 @@ export default function CaseDetailPage() {
             </div>
             <div className="flex items-center space-x-2">
               <InviteToCaseModal 
-                caseId={params.id as string}
+                caseId={caseId as string}
                 onInviteSent={() => {
                   toast({
                     title: "Invitation Sent",
@@ -733,7 +736,7 @@ export default function CaseDetailPage() {
                       Next Court Date
                       </div>
                       <AddHearingModal 
-                        caseId={params.id as string} 
+                        caseId={caseId as string} 
                         onHearingAdded={handleHearingAdded}
                       />
                     </CardTitle>
@@ -798,7 +801,7 @@ export default function CaseDetailPage() {
                 <CardDescription>Tasks assigned to you for this case</CardDescription>
                 </div>
                 <AddTaskModal 
-                  caseId={params.id as string}
+                  caseId={caseId as string}
                   onTaskAdded={loadTasks}
                 />
               </CardHeader>
@@ -908,7 +911,7 @@ export default function CaseDetailPage() {
                   <CardDescription>Structured facts about this case</CardDescription>
                 </div>
                 <CaseFactModal 
-                  caseId={params.id as string}
+                  caseId={caseId as string}
                   onFactChange={loadFacts}
                 />
                 </CardHeader>
@@ -924,7 +927,7 @@ export default function CaseDetailPage() {
                         </Badge>
                         <div className="flex space-x-1">
                           <CaseFactModal 
-                            caseId={params.id as string}
+                            caseId={caseId as string}
                             fact={fact}
                             onFactChange={loadFacts}
                             trigger={
@@ -990,7 +993,7 @@ export default function CaseDetailPage() {
                   <CardDescription>Expected results and goals for this case</CardDescription>
                 </div>
                 <DesiredOutcomeModal 
-                  caseId={params.id as string}
+                  caseId={caseId as string}
                   onOutcomeChange={loadDesiredOutcomes}
                 />
                 </CardHeader>
@@ -1013,7 +1016,7 @@ export default function CaseDetailPage() {
                         </div>
                         <div className="flex space-x-1">
                           <DesiredOutcomeModal 
-                            caseId={params.id as string}
+                            caseId={caseId as string}
                             outcome={outcome}
                             onOutcomeChange={loadDesiredOutcomes}
                             trigger={
@@ -1371,7 +1374,7 @@ export default function CaseDetailPage() {
                   </CardDescription>
                 </div>
                 <AddArtifactDialog 
-                  caseId={params.id as string}
+                  caseId={caseId as string}
                   onArtifactAdded={loadArtifacts} 
                 />
               </CardHeader>

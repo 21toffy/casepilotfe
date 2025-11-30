@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone', // Static standalone for deployment
+  output: 'export', // Static HTML export
   trailingSlash: true,
   eslint: {
     ignoreDuringBuilds: true,
@@ -9,7 +9,7 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true, // Required for static export
+    unoptimized: true,
   },
 }
 

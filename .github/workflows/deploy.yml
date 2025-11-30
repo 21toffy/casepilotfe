@@ -133,13 +133,10 @@ jobs:
       - name: Verify build output
         run: |
           if [ -d "out" ]; then
-            echo "Build output found in out/"
+            echo "Static export found in out/"
             ls -la out/ | head -20
-          elif [ -d ".next" ]; then
-            echo "Build output found in .next/"
-            ls -la .next/ | head -20
           else
-            echo "ERROR: No build output directory found!"
+            echo "ERROR: No out/ directory found!"
             ls -la
             exit 1
           fi
@@ -293,8 +290,8 @@ jobs:
           set -e
           sudo chown -R deployer:www-data ${{ env.TARGET_DIR }}
           sudo chmod -R 755 ${{ env.TARGET_DIR }}
-          sudo systemctl restart nginx
-          echo "✓ Permissions set and nginx restarted"
+          sudo systemctl reload nginx
+          echo "✓ Permissions set and nginx reloaded"
           ENDSSH
       
       - name: Cleanup SSH key
