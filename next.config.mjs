@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export', // Static export for deployment
+  output: 'standalone', // Static standalone for deployment
   trailingSlash: true,
   eslint: {
     ignoreDuringBuilds: true,
