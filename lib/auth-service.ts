@@ -36,7 +36,7 @@ export class AuthService {
   private lastActivity: number = Date.now()
   private isInitialized = false
 
-  private readonly STORAGE_KEY = process.env.NEXT_PUBLIC_SESSION_STORAGE_KEY || 'casepilot_session'
+  private readonly STORAGE_KEY = process.env.NEXT_PUBLIC_SESSION_STORAGE_KEY || 'lawcentrai_session'
   private readonly INACTIVITY_TIMEOUT = (parseInt(process.env.NEXT_PUBLIC_INACTIVITY_TIMEOUT || '3') * 60 * 1000) // Convert to milliseconds
   private readonly TOKEN_REFRESH_THRESHOLD = (parseInt(process.env.NEXT_PUBLIC_TOKEN_REFRESH_THRESHOLD || '5') * 60 * 1000) // Convert to milliseconds
 
