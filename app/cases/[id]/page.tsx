@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
+
+// Required for static export with dynamic routes
+export function generateStaticParams() {
+  // Return empty array - this route will be handled client-side
+  // The actual case ID will be read from the URL at runtime
+  return []
+}
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"

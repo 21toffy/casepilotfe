@@ -11,6 +11,13 @@ import { Loader2, CheckCircle, XCircle, Building2, Mail, User } from "lucide-rea
 import { getApiClient, extractErrorMessage } from "@/lib/api-client"
 import { useToast } from "@/lib/use-toast"
 
+// Required for static export with dynamic routes
+export function generateStaticParams() {
+  // Return empty array - this route will be handled client-side
+  // The actual token will be read from the URL at runtime
+  return []
+}
+
 interface InvitationData {
   id: string
   email: string
