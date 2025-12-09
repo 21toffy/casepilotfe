@@ -133,10 +133,16 @@ jobs:
       - name: Verify build output
         run: |
           if [ -d "out" ]; then
-            echo "Static export found in out/"
+            echo "✓ Static export found in out/"
             ls -la out/ | head -20
+            echo "BUILD_OUTPUT_DIR=out" >> $GITHUB_ENV
+          elif [ -d ".next/standalone" ]; then
+            echo "✓ Standalone build found in .next/standalone/"
+            ls -la .next/standalone/ | head -20
+            echo "BUILD_OUTPUT_DIR=.next/standalone" >> $GITHUB_ENV
           else
-            echo "ERROR: No out/ directory found!"
+            echo "ERROR: No build output directory found!"
+            echo "Expected either 'out/' (static export) or '.next/standalone/' (standalone)"
             ls -la
             exit 1
           fi
@@ -145,7 +151,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-lawcentrai-frontend-${{ steps.set-env.outputs.environment }}
-          path: out/
+          path: ${{ env.BUILD_OUTPUT_DIR || 'out' }}/
           retention-days: 1
           if-no-files-found: error
 
@@ -185,6 +191,15 @@ jobs:
         run: |
           echo "Contents of build-output:"
           ls -la ./build-output/
+          # Determine build output structure
+          if [ -d "./build-output/out" ]; then
+            echo "BUILD_SOURCE_DIR=./build-output/out" >> $GITHUB_ENV
+          elif [ -d "./build-output/.next/standalone" ]; then
+            echo "BUILD_SOURCE_DIR=./build-output/.next/standalone" >> $GITHUB_ENV
+          else
+            echo "BUILD_SOURCE_DIR=./build-output" >> $GITHUB_ENV
+          fi
+          echo "Using build source: ${{ env.BUILD_SOURCE_DIR }}"
       
       - name: Set deployment variables
         run: |
@@ -269,10 +284,11 @@ jobs:
       - name: Deploy to server
         run: |
           echo "Deploying to ${{ env.DEPLOY_HOST }}:${{ env.TARGET_DIR }}"
+          echo "Source directory: ${{ env.BUILD_SOURCE_DIR || './build-output' }}"
           
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
-            ./build-output/ \
+            ${{ env.BUILD_SOURCE_DIR || './build-output' }}/ \
             ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.TARGET_DIR }}/
           
           if [ $? -eq 0 ]; then
