@@ -41,22 +41,41 @@ export function CloudflareTurnstile({
 }: CloudflareTurnstileProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const widgetIdRef = useRef<string | null>(null)
+  const isRenderedRef = useRef(false)
   const isProduction = process.env.NODE_ENV === 'production'
 
   useEffect(() => {
     // Skip Turnstile in development
     if (!isProduction) {
       // Auto-verify with a dummy token in development
-      setTimeout(() => {
-        onVerify('dev-token')
-      }, 100)
+      if (!isRenderedRef.current) {
+        setTimeout(() => {
+          onVerify('dev-token')
+        }, 100)
+        isRenderedRef.current = true
+      }
       return
+    }
+
+    // Prevent multiple renders
+    if (isRenderedRef.current) {
+      return
+    }
+
+    // Cleanup any existing widget first
+    if (widgetIdRef.current && window.turnstile) {
+      try {
+        window.turnstile.remove(widgetIdRef.current)
+      } catch (error) {
+        console.error('Turnstile cleanup error:', error)
+      }
+      widgetIdRef.current = null
     }
 
     // Check if script is already loaded
     if (turnstileScriptLoaded && window.turnstile) {
       // Script already loaded, just render the widget
-      if (containerRef.current) {
+      if (containerRef.current && !widgetIdRef.current) {
         try {
           const widgetId = window.turnstile.render(containerRef.current, {
             sitekey: siteKey,
@@ -72,6 +91,7 @@ export function CloudflareTurnstile({
             size: size
           })
           widgetIdRef.current = widgetId
+          isRenderedRef.current = true
         } catch (error) {
           console.error('Turnstile render error:', error)
           if (onError) {
@@ -92,7 +112,7 @@ export function CloudflareTurnstile({
       
       script.onload = () => {
         turnstileScriptLoaded = true
-        if (containerRef.current && window.turnstile) {
+        if (containerRef.current && window.turnstile && !widgetIdRef.current) {
           try {
             const widgetId = window.turnstile.render(containerRef.current, {
               sitekey: siteKey,
@@ -108,6 +128,7 @@ export function CloudflareTurnstile({
               size: size
             })
             widgetIdRef.current = widgetId
+            isRenderedRef.current = true
           } catch (error) {
             console.error('Turnstile render error:', error)
             if (onError) {
@@ -128,7 +149,7 @@ export function CloudflareTurnstile({
     } else {
       // Script is loading, wait for it
       const checkInterval = setInterval(() => {
-        if (turnstileScriptLoaded && window.turnstile && containerRef.current) {
+        if (turnstileScriptLoaded && window.turnstile && containerRef.current && !widgetIdRef.current) {
           clearInterval(checkInterval)
           try {
             const widgetId = window.turnstile.render(containerRef.current, {
@@ -145,6 +166,7 @@ export function CloudflareTurnstile({
               size: size
             })
             widgetIdRef.current = widgetId
+            isRenderedRef.current = true
           } catch (error) {
             console.error('Turnstile render error:', error)
             if (onError) {
@@ -163,12 +185,14 @@ export function CloudflareTurnstile({
       if (widgetIdRef.current && window.turnstile) {
         try {
           window.turnstile.remove(widgetIdRef.current)
+          widgetIdRef.current = null
+          isRenderedRef.current = false
         } catch (error) {
           console.error('Turnstile cleanup error:', error)
         }
       }
     }
-  }, [siteKey, onVerify, onError, theme, size, isProduction])
+  }, [siteKey, theme, size, isProduction]) // Removed onVerify and onError from dependencies
 
   // Hide widget in development
   if (!isProduction) {

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { AuthBlocker } from "@/components/auth-blocker"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -50,6 +50,16 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string>("")
+
+  // Memoize callbacks to prevent re-renders
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token)
+  }, [])
+
+  const handleTurnstileError = useCallback((error: string) => {
+    console.error("Turnstile error:", error)
+    setError("Security verification failed. Please refresh the page.")
+  }, [])
 
   // Get redirect URL from query params or sessionStorage
   const getRedirectUrl = () => {
@@ -182,11 +192,8 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <CloudflareTurnstile
                   siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAACDu5GHln9jdUVp0"}
-                  onVerify={(token) => setTurnstileToken(token)}
-                  onError={(error) => {
-                    console.error("Turnstile error:", error)
-                    setError("Security verification failed. Please refresh the page.")
-                  }}
+                  onVerify={handleTurnstileVerify}
+                  onError={handleTurnstileError}
                 />
               </div>
             )}

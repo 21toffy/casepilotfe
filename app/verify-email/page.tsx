@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,6 +26,16 @@ export default function VerifyEmailPage() {
   const [canResend, setCanResend] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string>("")
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  // Memoize callbacks to prevent re-renders
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token)
+  }, [])
+
+  const handleTurnstileError = useCallback((error: string) => {
+    console.error("Turnstile error:", error)
+    setError("Security verification failed. Please refresh the page.")
+  }, [])
 
   useEffect(() => {
     // Get email and tag from localStorage
@@ -312,11 +322,8 @@ export default function VerifyEmailPage() {
             <div className="space-y-2">
               <CloudflareTurnstile
                 siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAACDu5GHln9jdUVp0"}
-                onVerify={(token) => setTurnstileToken(token)}
-                onError={(error) => {
-                  console.error("Turnstile error:", error)
-                  setError("Security verification failed. Please refresh the page.")
-                }}
+                onVerify={handleTurnstileVerify}
+                onError={handleTurnstileError}
               />
             </div>
           )}
