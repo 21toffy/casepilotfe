@@ -27,6 +27,10 @@ declare global {
   }
 }
 
+// Global flag to track if Turnstile script is already loaded
+let turnstileScriptLoaded = false
+let turnstileScriptElement: HTMLScriptElement | null = null
+
 export function CloudflareTurnstile({
   siteKey,
   onVerify,
@@ -49,14 +53,10 @@ export function CloudflareTurnstile({
       return
     }
 
-    // Load Turnstile script
-    const script = document.createElement('script')
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js'
-    script.async = true
-    script.defer = true
-    
-    script.onload = () => {
-      if (containerRef.current && window.turnstile) {
+    // Check if script is already loaded
+    if (turnstileScriptLoaded && window.turnstile) {
+      // Script already loaded, just render the widget
+      if (containerRef.current) {
         try {
           const widgetId = window.turnstile.render(containerRef.current, {
             sitekey: siteKey,
@@ -79,27 +79,93 @@ export function CloudflareTurnstile({
           }
         }
       }
+      return
     }
-    
-    script.onerror = () => {
-      if (onError) {
-        onError('Failed to load Turnstile script')
+
+    // Load Turnstile script only once
+    if (!turnstileScriptElement) {
+      const script = document.createElement('script')
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js'
+      script.async = true
+      script.defer = true
+      script.id = 'cloudflare-turnstile-script'
+      
+      script.onload = () => {
+        turnstileScriptLoaded = true
+        if (containerRef.current && window.turnstile) {
+          try {
+            const widgetId = window.turnstile.render(containerRef.current, {
+              sitekey: siteKey,
+              callback: (token: string) => {
+                onVerify(token)
+              },
+              'error-callback': (error: string) => {
+                if (onError) {
+                  onError(error)
+                }
+              },
+              theme: theme,
+              size: size
+            })
+            widgetIdRef.current = widgetId
+          } catch (error) {
+            console.error('Turnstile render error:', error)
+            if (onError) {
+              onError('Failed to initialize Turnstile')
+            }
+          }
+        }
       }
+      
+      script.onerror = () => {
+        if (onError) {
+          onError('Failed to load Turnstile script')
+        }
+      }
+      
+      document.body.appendChild(script)
+      turnstileScriptElement = script
+    } else {
+      // Script is loading, wait for it
+      const checkInterval = setInterval(() => {
+        if (turnstileScriptLoaded && window.turnstile && containerRef.current) {
+          clearInterval(checkInterval)
+          try {
+            const widgetId = window.turnstile.render(containerRef.current, {
+              sitekey: siteKey,
+              callback: (token: string) => {
+                onVerify(token)
+              },
+              'error-callback': (error: string) => {
+                if (onError) {
+                  onError(error)
+                }
+              },
+              theme: theme,
+              size: size
+            })
+            widgetIdRef.current = widgetId
+          } catch (error) {
+            console.error('Turnstile render error:', error)
+            if (onError) {
+              onError('Failed to initialize Turnstile')
+            }
+          }
+        }
+      }, 100)
+
+      // Cleanup interval after 10 seconds
+      setTimeout(() => clearInterval(checkInterval), 10000)
     }
-    
-    document.body.appendChild(script)
     
     return () => {
-      // Cleanup
+      // Cleanup widget only, not the script
       if (widgetIdRef.current && window.turnstile) {
         try {
           window.turnstile.remove(widgetIdRef.current)
         } catch (error) {
           console.error('Turnstile cleanup error:', error)
         }
-      }
-      if (document.body.contains(script)) {
-        document.body.removeChild(script)
       }
     }
   }, [siteKey, onVerify, onError, theme, size, isProduction])

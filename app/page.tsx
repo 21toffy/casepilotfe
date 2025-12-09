@@ -21,10 +21,61 @@ import {
   FileText,
   Shield,
   Menu,
-  X
+  X,
+  LogIn,
+  UserPlus
 } from 'lucide-react'
+import { ComingSoonModal } from '@/components/coming-soon-modal'
+import { AUTH_ENABLED } from '@/lib/auth-config'
 
 gsap.registerPlugin(ScrollTrigger)
+
+function SignInSignUpButtons() {
+  const [showModal, setShowModal] = useState(false)
+
+  // If auth is disabled, show coming soon modal
+  if (!AUTH_ENABLED) {
+    return (
+      <>
+        <button
+          onClick={() => setShowModal(true)}
+          className="font-mono text-xs uppercase tracking-widest hover:text-design-accent transition-colors pointer-events-auto flex items-center gap-2"
+        >
+          <LogIn className="w-4 h-4" />
+          Sign In
+        </button>
+        <button
+          onClick={() => setShowModal(true)}
+          className="bg-white/10 border border-white/20 backdrop-blur-md text-white px-4 py-2 rounded-full font-mono text-xs font-bold uppercase tracking-widest hover:bg-white/20 transition-colors duration-200 pointer-events-auto flex items-center gap-2"
+        >
+          <UserPlus className="w-4 h-4" />
+          Sign Up
+        </button>
+        <ComingSoonModal open={showModal} onOpenChange={setShowModal} />
+      </>
+    )
+  }
+
+  // If auth is enabled, show actual links
+  return (
+    <>
+      <Link
+        href="/login"
+        className="font-mono text-xs uppercase tracking-widest hover:text-design-accent transition-colors pointer-events-auto flex items-center gap-2"
+      >
+        <LogIn className="w-4 h-4" />
+        Sign In
+      </Link>
+      <Link
+        href="/register"
+        className="bg-white/10 border border-white/20 backdrop-blur-md text-white px-4 py-2 rounded-full font-mono text-xs font-bold uppercase tracking-widest hover:bg-white/20 transition-colors duration-200 pointer-events-auto flex items-center gap-2"
+      >
+        <UserPlus className="w-4 h-4" />
+        Sign Up
+      </Link>
+    </>
+  )
+}
 
 export default function HomePage() {
   const [loaderProgress, setLoaderProgress] = useState(0)
@@ -288,12 +339,11 @@ export default function HomePage() {
     }, 10)
 
     // Simulate processing
-    const processingId = Date.now()
-    setTerminalOutput(prev => [...prev, { type: 'processing', content: 'Processing...', id: processingId }])
+    setTerminalOutput(prev => [...prev, { type: 'processing', content: 'Processing...' }])
 
     await new Promise(r => setTimeout(r, 600))
 
-    setTerminalOutput(prev => prev.filter(item => item.id !== processingId))
+    setTerminalOutput(prev => prev.filter(item => item.type !== 'processing'))
 
     let response = "I can provide info on lawcentrai's features, pricing, or technology."
     const lCmd = cmd.toLowerCase()
@@ -328,7 +378,7 @@ export default function HomePage() {
         <div className="flex flex-col items-center gap-4">
           <div className="font-mono text-6xl md:text-8xl font-bold tracking-tighter">
             {loaderProgress}%
-          </div>
+            </div>
           <div className="w-32 h-[1px] bg-gray-800 relative overflow-hidden">
             <div id="loader-progress" className="absolute inset-0 bg-design-accent w-0"></div>
           </div>
@@ -357,9 +407,12 @@ export default function HomePage() {
               AI
             </Link>
           </div>
-          <Link href="#contact" className="bg-white text-black px-5 py-2 rounded-full font-mono text-xs font-bold uppercase tracking-widest hover:bg-design-accent hover:text-white transition-colors duration-200 magnetic-btn shadow-lg">
-            Get Started
-          </Link>
+          <div className="flex items-center gap-3">
+            <SignInSignUpButtons />
+            <Link href="#contact" className="bg-white text-black px-5 py-2 rounded-full font-mono text-xs font-bold uppercase tracking-widest hover:bg-design-accent hover:text-white transition-colors duration-200 magnetic-btn shadow-lg">
+              Get Started
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -368,7 +421,7 @@ export default function HomePage() {
         <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full opacity-30 pointer-events-none"></canvas>
 
         <div className="hero-glow absolute w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(235,58,20,0.08)_0%,rgba(255,255,255,0)_70%)] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[-1] rounded-full blur-[60px] opacity-0"></div>
-
+        
         <div className="flex flex-col text-center w-full max-w-[1800px] z-10 mx-auto relative items-center">
           <div className="mb-8 md:mb-12 flex items-center gap-3 px-4 py-1.5 rounded-full bg-white/40 backdrop-blur-md border border-white/20 shadow-sm opacity-0 hero-fade-in translate-y-5">
             <div className="flex gap-1 h-3 items-center">
@@ -397,7 +450,7 @@ export default function HomePage() {
           <div className="mt-8 md:mt-12 max-w-xl mx-auto opacity-0 hero-fade-in translate-y-5">
             <p className="text-design-secondary leading-relaxed text-balance text-lg md:text-2xl font-medium max-w-2xl mt-8 tracking-tight">
               We help law firms and legal professionals build scalable, digital practices with AI-powered insights.
-            </p>
+          </p>
           </div>
 
           <div className="mt-10 md:mt-14 flex gap-4 opacity-0 hero-fade-in translate-y-5">
@@ -409,7 +462,7 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
-
+          
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 opacity-0 hero-fade-in animate-bounce translate-y-5">
           <ArrowDown className="w-5 h-5 text-design-secondary/50" />
         </div>
@@ -437,8 +490,8 @@ export default function HomePage() {
             </div>
           ))}
         </div>
-      </div>
-
+          </div>
+          
       {/* Vision & Mission */}
       <section className="py-20 px-4 md:px-6 max-w-[1800px] mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
@@ -704,7 +757,7 @@ export default function HomePage() {
             <div>
               <h2 className="text-3xl md:text-5xl font-semibold tracking-tighter uppercase mb-4">
                 Use Cases
-              </h2>
+          </h2>
               <p className="text-secondary">Explore how lawcentrai helps.</p>
             </div>
           </div>
@@ -724,7 +777,7 @@ export default function HomePage() {
                 </h3>
                 <p className="text-secondary text-sm md:text-base leading-relaxed mb-6">
                   Manage thousands of documents and find the needle in the haystack with AI search.
-                </p>
+          </p>
               </div>
             </div>
             {/* Card 2 */}

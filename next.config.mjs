@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export', // Static HTML export
-  trailingSlash: true,
+  output: 'standalone', // Standalone output for dynamic routes
   eslint: {
     ignoreDuringBuilds: true,
   },

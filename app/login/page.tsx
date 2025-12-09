@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { AuthBlocker } from "@/components/auth-blocker"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -14,6 +15,7 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import { CloudflareTurnstile } from "@/components/cloudflare-turnstile"
+import { AUTH_ENABLED } from "@/lib/auth-config"
 
 // Interface for authentication error responses
 interface AuthErrorResponse {
@@ -34,6 +36,11 @@ interface LoginResult {
 }
 
 export default function LoginPage() {
+  // Check if auth is enabled
+  if (!AUTH_ENABLED) {
+    return <AuthBlocker />
+  }
+
   const router = useRouter()
   const { login, isAuthenticated, isLoading } = useAuth()
   const [formData, setFormData] = useState({
@@ -52,13 +59,13 @@ export default function LoginPage() {
     if (redirectParam) {
       return decodeURIComponent(redirectParam)
     }
-
+    
     // Then check sessionStorage
     const sessionRedirect = sessionStorage.getItem('redirectAfterLogin')
     if (sessionRedirect && sessionRedirect !== '/login') {
       return sessionRedirect
     }
-
+    
     return '/dashboard'
   }
 
@@ -86,7 +93,7 @@ export default function LoginPage() {
 
     try {
       const result = await login(formData.email, formData.password, turnstileToken || undefined) as LoginResult
-
+      
       if (result.success) {
         // Get redirect URL and navigate
         const redirectUrl = getRedirectUrl()
@@ -147,7 +154,7 @@ export default function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-
+            
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input

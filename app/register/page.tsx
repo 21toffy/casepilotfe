@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { AuthBlocker } from "@/components/auth-blocker"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -18,8 +19,14 @@ import { useAuth } from "@/contexts/auth-context"
 import { RegistrationService } from "@/lib/registration-service"
 import { useToast } from "@/lib/use-toast"
 import { CloudflareTurnstile } from "@/components/cloudflare-turnstile"
+import { AUTH_ENABLED } from "@/lib/auth-config"
 
 export default function RegisterPage() {
+  // Check if auth is enabled
+  if (!AUTH_ENABLED) {
+    return <AuthBlocker />
+  }
+
   const router = useRouter()
   const { isAuthenticated, isLoading } = useAuth()
   const { toast } = useToast()
@@ -73,20 +80,20 @@ export default function RegisterPage() {
 
       // Register firm
       const result = await RegistrationService.registerFirm({ ...formData, turnstile_token: turnstileToken || undefined })
-
+      
       if (result.success) {
         // Set redirecting flag to prevent auth redirect interference
         setIsRedirecting(true)
-
+        
         // Store email for verification page FIRST
         console.log('[Register] Storing verification email:', formData.adminEmail)
         localStorage.setItem('verification_email', formData.adminEmail)
         localStorage.setItem('verification_tag', 'registration-verification')
-
+        
         // Verify they were stored
         console.log('[Register] Stored email verification:', localStorage.getItem('verification_email'))
         console.log('[Register] Stored tag verification:', localStorage.getItem('verification_tag'))
-
+        
         // Store tokens for later use after verification (but don't set as active session yet)
         if (result.tokens) {
           localStorage.setItem('pending_tokens', JSON.stringify({
@@ -96,14 +103,14 @@ export default function RegisterPage() {
           }))
           console.log('[Register] Stored pending tokens')
         }
-
+        
         // Show success toast
         toast({
           variant: "success",
           title: "Account Created Successfully!",
           description: "Please check your email for verification code. Redirecting to verification page...",
         })
-
+        
         // Redirect to verification page after 3 seconds
         setTimeout(() => {
           console.log('[Register] About to redirect to /verify-email')
